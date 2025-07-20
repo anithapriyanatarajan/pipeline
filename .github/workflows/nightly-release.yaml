@@ -288,7 +288,7 @@ jobs:
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=ghcr-creds \
-            --timeout 2h \
+            --pipeline-timeout 2h \
             --showlog | grep "PipelineRun started:" | awk '{print $3}')
           
           echo "PIPELINE_RUN=${PIPELINE_RUN}" >> $GITHUB_ENV
