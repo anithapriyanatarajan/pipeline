@@ -72,10 +72,10 @@ jobs:
           # Create secret for Git resolver API token
           kubectl create secret generic git-resolver-secret \
             --from-literal=token="${GITHUB_TOKEN}" \
-            -n tekton-pipelines || echo "Secret may already exist"
+            -n tekton-pipelines-resolvers || echo "Secret may already exist"
           
           # Enable resolvers in feature flags
-          kubectl patch configmap resolvers-feature-flags -n tekton-pipelines --patch='
+          kubectl patch configmap resolvers-feature-flags -n tekton-pipelines-resolvers --patch='
           data:
             enable-git-resolver: "true"
             enable-hub-resolver: "true"
@@ -92,7 +92,7 @@ jobs:
             --from-literal=server-url="https://api.github.com" \
             --from-literal=api-token-secret-name="git-resolver-secret" \
             --from-literal=api-token-secret-key="token" \
-            -n tekton-pipelines || echo "ConfigMap may already exist"
+            -n tekton-pipelines-resolvers || echo "ConfigMap may already exist"
           
           # Restart the resolvers to pick up the new configuration
           kubectl rollout restart deployment/tekton-pipelines-resolvers -n tekton-pipelines || echo "Resolvers deployment may not exist"
