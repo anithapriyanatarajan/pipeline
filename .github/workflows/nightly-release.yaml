@@ -174,6 +174,8 @@ jobs:
           validate_param "retention" "${RETENTION}" "^[1-9][0-9]*$"
           echo "🚀 Starting Tekton pipeline..."
           tkn pipeline list
+          
+          # Capture the pipeline start output
           PIPELINE_START_OUTPUT=$(tkn pipeline start pipeline-release-nightly \
             --param package="${PACKAGE}" \
             --param gitRevision="${{ steps.latest.outputs.sha }}" \
@@ -191,17 +193,52 @@ jobs:
             --workspace name=release-images-secret,secret=ghcr-creds \
             --pipeline-timeout 2h 2>&1)
 
-          echo "PIPELINE_START_OUTPUT:"
-          echo "$PIPELINE_START_OUTPUT"
+          echo "📋 Pipeline start output:"
+          echo "${PIPELINE_START_OUTPUT}"
 
-          PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep "PipelineRun started:" | awk '{print $3}' | head -n1)
-          if [ -z "${PIPELINE_RUN}" ]; then
-            echo "❌ Failed to extract pipeline run name from output"
-            echo "Full output was: ${PIPELINE_START_OUTPUT}"
-            exit 1
+          # Extract pipeline run name from the output
+          PIPELINE_RUN=""
+          if echo "${PIPELINE_START_OUTPUT}" | grep -q "PipelineRun started:"; then
+            PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep "PipelineRun started:" | awk '{print $3}')
+          elif echo "${PIPELINE_START_OUTPUT}" | grep -qE "(started|Started)"; then
+            # Try to extract any pipeline run name pattern from the output
+            PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep -oE "pipeline-release-nightly-[a-z0-9]+" | head -n1)
           fi
-          echo "✅ Pipeline run started: ${PIPELINE_RUN}"
-          echo "PIPELINE_RUN=${PIPELINE_RUN}" >> $GITHUB_ENV
+
+          # If we still don't have a pipeline run name, try to get the latest one
+          if [[ -z "${PIPELINE_RUN}" ]]; then
+            echo "⚠️  Could not extract pipeline run name from start output"
+            echo "🔍 Attempting to find the most recent pipeline run..."
+            sleep 3  # Give it a moment to be created
+            
+            # Try multiple methods to get the pipeline run
+            PIPELINE_RUN=$(tkn pipelinerun list --limit 1 -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            
+            if [[ -z "${PIPELINE_RUN}" ]]; then
+              PIPELINE_RUN=$(kubectl get pipelinerun -l tekton.dev/pipeline=pipeline-release-nightly --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || echo "")
+            fi
+          fi
+
+          if [[ -n "${PIPELINE_RUN}" ]]; then
+            echo "✅ Pipeline run captured: ${PIPELINE_RUN}"
+            echo "PIPELINE_RUN=${PIPELINE_RUN}" >> $GITHUB_ENV
+            
+            # Verify the pipeline run exists
+            if tkn pipelinerun describe "${PIPELINE_RUN}" >/dev/null 2>&1; then
+              echo "✅ Pipeline run verified and accessible"
+            else
+              echo "⚠️  Pipeline run exists but may not be ready yet"
+            fi
+          else
+            echo "❌ Failed to capture pipeline run name"
+            echo "🔍 Debug: Available pipeline runs:"
+            tkn pipelinerun list || echo "No pipeline runs found"
+            echo "🔍 Debug: Kubernetes pipeline runs:"
+            kubectl get pipelinerun -A || echo "No pipeline runs in cluster"
+            
+            # Don't exit here, let the monitoring step handle the empty pipeline run
+            echo "PIPELINE_RUN=" >> $GITHUB_ENV
+          fi
 
       - name: Monitor Pipeline Execution
         run: |
