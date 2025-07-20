@@ -180,6 +180,23 @@ jobs:
           tkn pipeline list
           
           # Capture the pipeline start output
+          tkn pipeline start pipeline-release-nightly \
+            --param package="${PACKAGE}" \
+            --param gitRevision="${{ steps.latest.outputs.sha }}" \
+            --param versionTag="${{ steps.latest.outputs.versionTag }}" \
+            --param releaseBucket="${BUCKET}" \
+            --param imageRegistry=ghcr.io \
+            --param imageRegistryPath="${REGISTRY_PATH}" \
+            --param imageRegistryUser="${REGISTRY_USER}" \
+            --param serviceAccountPath=release.json \
+            --param serviceAccountImagesPath=credentials \
+            --param runTests="${RUN_TESTS}" \
+            --param retentionDays="${RETENTION}" \
+            --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
+            --workspace name=release-secret,secret=release-secret \
+            --workspace name=release-images-secret,secret=ghcr-creds \
+            --pipeline-timeout 2h
+            
           PIPELINE_START_OUTPUT=$(tkn pipeline start pipeline-release-nightly \
             --param package="${PACKAGE}" \
             --param gitRevision="${{ steps.latest.outputs.sha }}" \
