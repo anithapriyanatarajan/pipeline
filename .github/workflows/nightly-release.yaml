@@ -180,7 +180,7 @@ jobs:
           tkn pipeline list
           
           # Capture the pipeline start output
-          tkn pipeline start pipeline-release-nightly \
+          PIPELINE_START_OUTPUT=$(tkn pipeline start pipeline-release-nightly \
             --param package="${PACKAGE}" \
             --param gitRevision="${{ steps.latest.outputs.sha }}" \
             --param versionTag="${{ steps.latest.outputs.versionTag }}" \
@@ -199,35 +199,18 @@ jobs:
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=ghcr-creds \
-            --pipeline-timeout 2h
-            
-          PIPELINE_START_OUTPUT=$(tkn pipeline start pipeline-release-nightly \
-            --param package="${PACKAGE}" \
-            --param gitRevision="${{ steps.latest.outputs.sha }}" \
-            --param versionTag="${{ steps.latest.outputs.versionTag }}" \
-            --param releaseBucket="${BUCKET}" \
-            --param imageRegistry=ghcr.io \
-            --param imageRegistryPath="${REGISTRY_PATH}" \
-            --param imageRegistryUser="${REGISTRY_USER}" \
-            --param serviceAccountPath=release.json \
-            --param serviceAccountImagesPath=credentials \
-            --param runTests="${RUN_TESTS}" \
-            --param retentionDays="${RETENTION}" \
-            --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
-            --workspace name=release-secret,secret=release-secret \
-            --workspace name=release-images-secret,secret=ghcr-creds \
             --pipeline-timeout 2h 2>&1)
 
           echo "📋 Pipeline start output:"
           echo "${PIPELINE_START_OUTPUT}"
 
-          # Extract pipeline run name from the output
+          # Extract pipeline run name from the output - updated to match actual format
           PIPELINE_RUN=""
           if echo "${PIPELINE_START_OUTPUT}" | grep -q "PipelineRun started:"; then
             PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep "PipelineRun started:" | awk '{print $3}')
-          elif echo "${PIPELINE_START_OUTPUT}" | grep -qE "(started|Started)"; then
-            # Try to extract any pipeline run name pattern from the output
-            PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep -oE "pipeline-release-nightly-[a-z0-9]+" | head -n1)
+          elif echo "${PIPELINE_START_OUTPUT}" | grep -qE "pipeline-release-nightly-run-[a-z0-9]+"; then
+            # Extract the pipeline run name directly from the output
+            PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep -oE "pipeline-release-nightly-run-[a-z0-9]+" | head -n1)
           fi
 
           # If we still don't have a pipeline run name, try to get the latest one
