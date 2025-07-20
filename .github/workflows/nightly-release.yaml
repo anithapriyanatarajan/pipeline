@@ -83,19 +83,20 @@ jobs:
             enable-cluster-resolver: "true"
           ' || echo "ConfigMap may not exist yet"
           
-          # Create git resolver config using kubectl create
-          kubectl create configmap git-resolver-config \
-            --from-literal=default-url="https://github.com" \
-            --from-literal=default-revision="main" \
-            --from-literal=fetch-timeout="1m" \
-            --from-literal=scm-type="github" \
-            --from-literal=server-url="https://api.github.com" \
-            --from-literal=api-token-secret-name="git-resolver-secret" \
-            --from-literal=api-token-secret-key="token" \
-            -n tekton-pipelines-resolvers || echo "ConfigMap may already exist"
+          # Update git resolver config using kubectl patch
+          kubectl patch configmap git-resolver-config -n tekton-pipelines-resolvers --patch='
+          data:
+            default-url: "https://github.com"
+            default-revision: "main"
+            fetch-timeout: "1m"
+            scm-type: "github"
+            server-url: "https://api.github.com"
+            api-token-secret-name: "git-resolver-secret"
+            api-token-secret-key: "token"
+          '
           
           # Restart the resolvers to pick up the new configuration
-          kubectl rollout restart deployment/tekton-pipelines-resolvers -n tekton-pipelines || echo "Resolvers deployment may not exist"
+          kubectl rollout restart deployment/tekton-pipelines-remote-resolvers -n tekton-pipelines-resolvers || echo "Resolvers deployment may not exist"
           
           echo "✅ Git resolver configured"
 
