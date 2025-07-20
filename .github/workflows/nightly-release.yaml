@@ -190,6 +190,10 @@ jobs:
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=ghcr-creds \
             --pipeline-timeout 2h 2>&1)
+
+          echo "PIPELINE_START_OUTPUT:"
+          echo "$PIPELINE_START_OUTPUT"
+
           PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep "PipelineRun started:" | awk '{print $3}' | head -n1)
           if [ -z "${PIPELINE_RUN}" ]; then
             echo "❌ Failed to extract pipeline run name from output"
