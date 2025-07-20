@@ -129,14 +129,18 @@ jobs:
             --docker-username=${{ github.actor }} \
             --docker-password="${GHCR_TOKEN}" \
             --docker-email=${{ github.actor }}@users.noreply.github.com
-          cat <<EOF > workspace-template.yaml
-          spec:
-            accessModes:
-            - ReadWriteOnce
-            resources:
-              requests:
-                storage: 1Gi
-          EOF
+          
+          # Create workspace template for pipeline storage
+          echo 'spec:' > workspace-template.yaml
+          echo '  accessModes:' >> workspace-template.yaml
+          echo '  - ReadWriteOnce' >> workspace-template.yaml
+          echo '  resources:' >> workspace-template.yaml
+          echo '    requests:' >> workspace-template.yaml
+          echo '      storage: 1Gi' >> workspace-template.yaml
+          
+          # Verify the workspace template was created
+          echo "📝 Workspace template created:"
+          cat workspace-template.yaml
 
       - name: Start Nightly Tekton Pipeline
         run: |
