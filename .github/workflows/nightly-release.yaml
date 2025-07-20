@@ -273,7 +273,15 @@ jobs:
           echo ""
           
           # Start the Tekton pipeline with appropriate parameters
-          PIPELINE_RUN=$(tkn pipeline start pipeline-release-nightly \
+          echo "🚀 Starting Tekton pipeline..."
+          
+          # First, verify the pipeline exists
+          echo "🔍 Verifying pipeline exists..."
+          tkn pipeline list
+          
+          # Start pipeline without showlog first to capture the run name
+          echo "🎯 Starting pipeline run..."
+          PIPELINE_START_OUTPUT=$(tkn pipeline start pipeline-release-nightly \
             --param package="${PACKAGE}" \
             --param gitRevision="${{ steps.latest.outputs.sha }}" \
             --param versionTag="${{ steps.latest.outputs.versionTag }}" \
@@ -288,10 +296,38 @@ jobs:
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=ghcr-creds \
-            --pipeline-timeout 2h \
-            --showlog | grep "PipelineRun started:" | awk '{print $3}')
+            --pipeline-timeout 2h 2>&1)
           
+          echo "Pipeline start output:"
+          echo "${PIPELINE_START_OUTPUT}"
+          
+          # Extract pipeline run name
+          PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep "PipelineRun started:" | awk '{print $3}' | head -n1)
+          
+          if [ -z "${PIPELINE_RUN}" ]; then
+            echo "❌ Failed to extract pipeline run name from output"
+            echo "Full output was: ${PIPELINE_START_OUTPUT}"
+            exit 1
+          fi
+          
+          echo "✅ Pipeline run started: ${PIPELINE_RUN}"
           echo "PIPELINE_RUN=${PIPELINE_RUN}" >> $GITHUB_ENV
+
+      # PRODUCTION & FORK: Monitor pipeline execution
+      - name: Monitor Pipeline Execution
+        run: |
+          if [ -n "${PIPELINE_RUN}" ]; then
+            echo "📊 Monitoring pipeline execution: ${PIPELINE_RUN}"
+            
+            # Show logs with follow for real-time monitoring
+            echo "📝 Following pipeline logs..."
+            tkn pipelinerun logs ${PIPELINE_RUN} --follow || {
+              echo "⚠️  Log following failed, showing status instead"
+              tkn pipelinerun describe ${PIPELINE_RUN}
+            }
+          else
+            echo "❌ No pipeline run to monitor"
+          fi
 
       # PRODUCTION & FORK: Display pipeline execution results
       - name: Show Pipeline Results
