@@ -66,8 +66,39 @@ jobs:
       # PRODUCTION & FORK: Install Tekton Pipelines runtime
       - name: Install Tekton Pipelines
         run: |
+          echo "🔧 Installing Tekton Pipelines..."
           kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
-          kubectl wait deployment tekton-pipelines-controller -n tekton-pipelines --for=condition=Available=True --timeout=90s
+          
+          echo "⏳ Waiting for Tekton controller deployment..."
+          kubectl wait deployment tekton-pipelines-controller -n tekton-pipelines --for=condition=Available=True --timeout=180s
+          
+          echo "⏳ Waiting for Tekton webhook deployment..."
+          kubectl wait deployment tekton-pipelines-webhook -n tekton-pipelines --for=condition=Available=True --timeout=180s
+          
+          echo "🔍 Verifying webhook service is ready..."
+          kubectl wait --for=condition=ready pod -l app=tekton-pipelines-webhook -n tekton-pipelines --timeout=120s
+          
+          echo "✅ Tekton Pipelines installation completed"
+
+      # PRODUCTION & FORK: Debug Tekton installation
+      - name: Debug Tekton Installation
+        run: |
+          echo "🔍 Debugging Tekton installation status..."
+          
+          echo "=== Tekton Deployments ==="
+          kubectl get deployments -n tekton-pipelines -o wide
+          
+          echo "=== Tekton Pods ==="
+          kubectl get pods -n tekton-pipelines -o wide
+          
+          echo "=== Tekton Services ==="
+          kubectl get services -n tekton-pipelines
+          
+          echo "=== Tekton Webhook Configuration ==="
+          kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io | grep tekton || echo "No Tekton webhooks found"
+          
+          echo "=== Tekton Events (last 10) ==="
+          kubectl get events -n tekton-pipelines --sort-by='.lastTimestamp' | tail -10 || echo "No events found"
 
       # PRODUCTION & FORK: Install Tekton CLI for pipeline management
       - name: Install tkn CLI
@@ -77,7 +108,41 @@ jobs:
 
       # PRODUCTION & FORK: Apply the nightly pipeline definition
       - name: Apply Nightly Pipeline Definition
-        run: kubectl apply -f tekton/release-nightly-pipeline.yaml
+        run: |
+          echo "📋 Applying nightly pipeline definition..."
+          
+          # Verify Tekton webhook is responsive before applying
+          echo "🔍 Testing webhook connectivity..."
+          for i in {1..10}; do
+            if kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io webhook.pipeline.tekton.dev >/dev/null 2>&1; then
+              echo "✅ Tekton webhook configuration found"
+              break
+            fi
+            echo "⏳ Waiting for webhook configuration... (attempt $i/10)"
+            sleep 5
+          done
+          
+          # Apply pipeline with retry logic
+          echo "🚀 Applying pipeline definition..."
+          for i in {1..5}; do
+            if kubectl apply -f tekton/release-nightly-pipeline.yaml; then
+              echo "✅ Pipeline applied successfully"
+              break
+            else
+              echo "⚠️  Failed to apply pipeline (attempt $i/5)"
+              if [ $i -eq 5 ]; then
+                echo "❌ Failed to apply pipeline after 5 attempts"
+                exit 1
+              fi
+              echo "⏳ Waiting 10 seconds before retry..."
+              sleep 10
+            fi
+          done
+          
+          # Verify pipeline was created
+          echo "🔍 Verifying pipeline creation..."
+          kubectl get pipeline pipeline-release-nightly -o name
+          echo "✅ Pipeline verification completed"
 
       # PRODUCTION & FORK: Create secrets and workspace configuration
       - name: Create secrets and PVC template
