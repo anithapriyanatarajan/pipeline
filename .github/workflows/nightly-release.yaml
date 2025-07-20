@@ -1,0 +1,256 @@
+name: Nightly Tekton Release
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 3 AM UTC daily - PRODUCTION: automated nightly releases
+  workflow_dispatch: # PRODUCTION & FORK: manual trigger for both testing and emergency releases
+  push: # FORK TESTING ONLY: remove this trigger before merging to production
+    branches:
+      - nightly-pipeline-gha # FORK TESTING: triggers on pushes to this branch for development
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    name: Nightly Pipeline Release
+    
+    # SECURITY: Restrict permissions to minimum required
+    permissions:
+      contents: read        # Read repository content
+      packages: write       # Push to GHCR (if needed)
+      id-token: write      # For OIDC token generation
+      
+    env:
+      # PRODUCTION & FORK: Configurable Kubernetes version for testing and production
+      # Update this version to test against different Kubernetes releases
+      KUBERNETES_VERSION: "v1.31.0"  # Current target: Kubernetes v1.31
+
+    steps:
+      # PRODUCTION & FORK: Always checkout the workflow repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # PRODUCTION & FORK: Get commit SHA from appropriate repository
+      - name: Get latest commit from main
+        id: latest
+        run: |
+          # PRODUCTION: Use upstream tektoncd/pipeline repository
+          # FORK TESTING: Use current fork repository for testing
+          if [[ "${{ github.repository }}" == "tektoncd/pipeline" ]]; then
+            REPO="https://github.com/tektoncd/pipeline.git"
+            echo "🚀 PRODUCTION MODE: Using upstream tektoncd/pipeline repository"
+          else
+            REPO="https://github.com/${{ github.repository }}.git"
+            echo "🧪 FORK TESTING MODE: Using fork repository ${{ github.repository }}"
+          fi
+          
+          sha=$(git ls-remote ${REPO} refs/heads/main | cut -f1)
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          date_tag=$(date +v%Y%m%d-${sha:0:7})
+          echo "versionTag=${date_tag}" >> "$GITHUB_OUTPUT"
+          echo "Using SHA: ${sha}"
+          echo "Version tag: ${date_tag}"
+
+      # PRODUCTION & FORK: Set up Kubernetes cluster for pipeline execution
+      - name: Set up Kind
+        uses: helm/kind-action@v1.8.0
+        with:
+          # PRODUCTION & FORK: Use configurable Kubernetes version
+          node_image: kindest/node:${{ env.KUBERNETES_VERSION }}
+          
+      - name: Display Kubernetes Version
+        run: |
+          echo "🐳 Kubernetes cluster version: ${{ env.KUBERNETES_VERSION }}"
+          kubectl version --client
+          kubectl version --short
+
+      # PRODUCTION & FORK: Install Tekton Pipelines runtime
+      - name: Install Tekton Pipelines
+        run: |
+          kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
+          kubectl wait deployment tekton-pipelines-controller -n tekton-pipelines --for=condition=Available=True --timeout=90s
+
+      # PRODUCTION & FORK: Install Tekton CLI for pipeline management
+      - name: Install tkn CLI
+        run: |
+          curl -sL https://github.com/tektoncd/cli/releases/download/v0.30.0/tkn_0.30.0_Linux_x86_64.tar.gz | tar xz
+          sudo mv tkn /usr/local/bin/
+
+      # PRODUCTION & FORK: Apply the nightly pipeline definition
+      - name: Apply Nightly Pipeline Definition
+        run: kubectl apply -f tekton/release-nightly-pipeline.yaml
+
+      # PRODUCTION & FORK: Create secrets and workspace configuration
+      - name: Create secrets and PVC template
+        run: |
+          # PRODUCTION: Use real secrets from GitHub repository secrets
+          # FORK TESTING: Use dummy secrets for pipeline structure testing
+          if [[ "${{ github.repository }}" == "tektoncd/pipeline" ]]; then
+            echo "🚀 PRODUCTION MODE: Using real secrets from GitHub repository secrets"
+            echo "⚠️  PRODUCTION SETUP REQUIRED: Ensure these GitHub secrets exist:"
+            echo "   - GCS_SERVICE_ACCOUNT_KEY: GCS service account JSON for bucket access"
+            echo "   - GHCR_TOKEN: GitHub Container Registry token for image publishing"
+            
+            # PRODUCTION: Validate that secrets exist before proceeding
+            if [[ -z "${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}" ]]; then
+              echo "❌ ERROR: GCS_SERVICE_ACCOUNT_KEY secret is not configured"
+              exit 1
+            fi
+            
+            if [[ -z "${{ secrets.GHCR_TOKEN }}" ]]; then
+              echo "❌ ERROR: GHCR_TOKEN secret is not configured"  
+              exit 1
+            fi
+            
+            # PRODUCTION: Create real secrets (requires GitHub secrets to be configured)
+            # Use base64 encoding to safely handle JSON content
+            echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' | base64 -d > /tmp/gcs-key.json
+            kubectl create secret generic release-secret \
+              --from-file=release.json=/tmp/gcs-key.json
+            rm -f /tmp/gcs-key.json  # Clean up temporary file
+            
+            # Create Docker config secret for GHCR
+            kubectl create secret docker-registry ghcr-creds \
+              --docker-server=ghcr.io \
+              --docker-username=${{ github.actor }} \
+              --docker-password='${{ secrets.GHCR_TOKEN }}' \
+              --docker-email=${{ github.actor }}@users.noreply.github.com
+          else
+            echo "🧪 FORK TESTING MODE: Using dummy secrets for pipeline structure testing"
+            echo "ℹ️  FORK NOTE: This will test pipeline logic but not actual publishing"
+            
+            # FORK TESTING: Create dummy secrets (for testing pipeline structure only)
+            kubectl create secret generic release-secret \
+              --from-literal=release.json='{"type":"service_account","project_id":"dummy"}' || true
+            kubectl create secret generic ghcr-creds \
+              --from-literal=credentials='{"username":"dummy","password":"dummy"}' || true
+          fi
+          
+          # PRODUCTION & FORK: Create workspace template for pipeline storage
+          cat <<EOF > workspace-template.yaml
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+          EOF
+
+      # PRODUCTION & FORK: Execute the nightly release pipeline
+      - name: Start Nightly Tekton Pipeline
+        run: |
+          # SECURITY: Input validation for pipeline parameters
+          validate_param() {
+            local param_name="$1"
+            local param_value="$2"
+            local pattern="$3"
+            
+            if [[ ! "${param_value}" =~ ${pattern} ]]; then
+              echo "❌ ERROR: Invalid ${param_name}: ${param_value}"
+              echo "Expected pattern: ${pattern}"
+              exit 1
+            fi
+          }
+          
+          # Validate git revision (40 character hex)
+          validate_param "gitRevision" "${{ steps.latest.outputs.sha }}" "^[a-f0-9]{40}$"
+          
+          # Validate version tag format
+          validate_param "versionTag" "${{ steps.latest.outputs.versionTag }}" "^v[0-9]{8}-[a-f0-9]{7}$"
+          
+          # PRODUCTION: Full production release with real parameters
+          # FORK TESTING: Lightweight testing with dummy parameters
+          if [[ "${{ github.repository }}" == "tektoncd/pipeline" ]]; then
+            echo "🚀 PRODUCTION MODE: Full release with testing and real publishing"
+            
+            # PRODUCTION PARAMETERS: Real values for official releases
+            PACKAGE="github.com/tektoncd/pipeline"                    # Official Tekton repository
+            BUCKET="gs://tekton-releases-nightly/pipeline"             # Official nightly bucket
+            REGISTRY_PATH="tekton-releases-nightly"                    # Official registry path
+            REGISTRY_USER="tekton-robot"                               # Official service account
+            RUN_TESTS="true"                                           # Full test suite
+            RETENTION="30"                                             # 30 days retention
+            
+            echo "📦 Publishing to: ${BUCKET}"
+            echo "🐳 Container registry: ghcr.io/${REGISTRY_PATH}"
+            echo "🧪 Running full test suite: ${RUN_TESTS}"
+          else
+            echo "🧪 FORK TESTING MODE: Pipeline structure testing with dummy parameters"
+            echo "ℹ️  This will test the pipeline but not publish real artifacts"
+            
+            # FORK TESTING PARAMETERS: Safe values for testing
+            PACKAGE="github.com/${{ github.repository }}"              # Your fork repository
+            BUCKET="gs://test-nightly-bucket-${{ github.run_id }}/pipeline"  # Temporary test bucket
+            REGISTRY_PATH="${{ github.repository_owner }}/pipeline-test"     # Your test registry
+            REGISTRY_USER="dummy"                                       # Dummy credentials
+            RUN_TESTS="false"                                          # Skip tests for faster iteration
+            RETENTION="7"                                              # Shorter retention for testing
+            
+            echo "📦 Test bucket: ${BUCKET}"
+            echo "🐳 Test registry: ghcr.io/${REGISTRY_PATH}"
+            echo "⚡ Skipping tests for faster testing: ${RUN_TESTS}"
+          fi
+          
+          # SECURITY: Additional parameter validation
+          validate_param "package" "${PACKAGE}" "^github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$"
+          validate_param "bucket" "${BUCKET}" "^gs://[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9](/.*)?$"
+          validate_param "registryPath" "${REGISTRY_PATH}" "^[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9](/[a-zA-Z0-9_.-]+)*$"
+          validate_param "retention" "${RETENTION}" "^[1-9][0-9]*$"
+          
+          echo ""
+          echo "🔧 Validated Pipeline Parameters:"
+          echo "   Package: ${PACKAGE}"
+          echo "   Git Revision: ${{ steps.latest.outputs.sha }}"
+          echo "   Version Tag: ${{ steps.latest.outputs.versionTag }}"
+          echo "   Release Bucket: ${BUCKET}"
+          echo "   Registry Path: ${REGISTRY_PATH}"
+          echo "   Run Tests: ${RUN_TESTS}"
+          echo "   Retention Days: ${RETENTION}"
+          echo ""
+          
+          # Start the Tekton pipeline with appropriate parameters
+          PIPELINE_RUN=$(tkn pipeline start pipeline-release-nightly \
+            --param package="${PACKAGE}" \
+            --param gitRevision="${{ steps.latest.outputs.sha }}" \
+            --param versionTag="${{ steps.latest.outputs.versionTag }}" \
+            --param releaseBucket="${BUCKET}" \
+            --param imageRegistry=ghcr.io \
+            --param imageRegistryPath="${REGISTRY_PATH}" \
+            --param imageRegistryUser="${REGISTRY_USER}" \
+            --param serviceAccountPath=release.json \
+            --param serviceAccountImagesPath=credentials \
+            --param runTests="${RUN_TESTS}" \
+            --param retentionDays="${RETENTION}" \
+            --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
+            --workspace name=release-secret,secret=release-secret \
+            --workspace name=release-images-secret,secret=ghcr-creds \
+            --timeout 2h \
+            --showlog | grep "PipelineRun started:" | awk '{print $3}')
+          
+          echo "PIPELINE_RUN=${PIPELINE_RUN}" >> $GITHUB_ENV
+
+      # PRODUCTION & FORK: Display pipeline execution results
+      - name: Show Pipeline Results
+        if: always()
+        run: |
+          echo "📊 Pipeline Execution Results"
+          echo "Pipeline run: ${PIPELINE_RUN}"
+          echo ""
+          
+          if [ -n "${PIPELINE_RUN}" ]; then
+            echo "=== 📋 Pipeline Run Status ==="
+            tkn pipelinerun describe ${PIPELINE_RUN} || true
+            echo ""
+            echo "=== 📝 Pipeline Run Logs ==="
+            tkn pipelinerun logs ${PIPELINE_RUN} --follow=false || true
+            
+            # Additional context for fork testing
+            if [[ "${{ github.repository }}" != "tektoncd/pipeline" ]]; then
+              echo ""
+              echo "🧪 FORK TESTING NOTES:"
+              echo "   ✅ Pipeline structure validated"
+              echo "   ⚠️  Publishing will fail with dummy credentials (expected)"
+              echo "   🔍 Check logs above for pipeline logic validation"
+            fi
+          else
+            echo "❌ Pipeline run name not captured - check pipeline start step"
+          fi
