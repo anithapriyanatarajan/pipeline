@@ -62,6 +62,43 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=tekton-pipelines-webhook -n tekton-pipelines --timeout=120s
           echo "✅ Tekton Pipelines installation completed"
 
+      - name: Configure Tekton Git Resolver
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN || secrets.GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "🔧 Configuring Tekton Git resolver..."
+          
+          # Create secret for Git resolver API token
+          kubectl create secret generic git-resolver-secret \
+            --from-literal=token="${GITHUB_TOKEN}" \
+            -n tekton-pipelines || echo "Secret may already exist"
+          
+          # Enable resolvers in feature flags
+          kubectl patch configmap resolvers-feature-flags -n tekton-pipelines --patch='
+          data:
+            enable-git-resolver: "true"
+            enable-hub-resolver: "true"
+            enable-bundles-resolver: "true"
+            enable-cluster-resolver: "true"
+          ' || echo "ConfigMap may not exist yet"
+          
+          # Create git resolver config using kubectl create
+          kubectl create configmap git-resolver-config \
+            --from-literal=default-url="https://github.com" \
+            --from-literal=default-revision="main" \
+            --from-literal=fetch-timeout="1m" \
+            --from-literal=scm-type="github" \
+            --from-literal=server-url="https://api.github.com" \
+            --from-literal=api-token-secret-name="git-resolver-secret" \
+            --from-literal=api-token-secret-key="token" \
+            -n tekton-pipelines || echo "ConfigMap may already exist"
+          
+          # Restart the resolvers to pick up the new configuration
+          kubectl rollout restart deployment/tekton-pipelines-resolvers -n tekton-pipelines || echo "Resolvers deployment may not exist"
+          
+          echo "✅ Git resolver configured"
+
       - name: Debug Tekton Installation
         run: |
           set -euo pipefail
