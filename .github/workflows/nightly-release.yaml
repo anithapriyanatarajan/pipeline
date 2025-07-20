@@ -68,6 +68,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "🔧 Configuring Tekton Git resolver..."
+
+          kubectl get cm -n tekton-pipelines-resolvers
+          kubectl get pods -A
           
           # Create secret for Git resolver API token
           kubectl create secret generic git-resolver-secret \
