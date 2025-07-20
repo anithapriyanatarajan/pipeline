@@ -103,7 +103,7 @@ jobs:
       # PRODUCTION & FORK: Install Tekton CLI for pipeline management
       - name: Install tkn CLI
         run: |
-          curl -sL https://github.com/tektoncd/cli/releases/download/v0.30.0/tkn_0.30.0_Linux_x86_64.tar.gz | tar xz
+          curl -sL https://github.com/tektoncd/cli/releases/download/v0.41.1/tkn_0.41.1_Linux_x86_64.tar.gz | tar xz
           sudo mv tkn /usr/local/bin/
 
       # PRODUCTION & FORK: Apply the nightly pipeline definition
@@ -180,14 +180,35 @@ jobs:
               --docker-password='${{ secrets.GHCR_TOKEN }}' \
               --docker-email=${{ github.actor }}@users.noreply.github.com
           else
-            echo "🧪 FORK TESTING MODE: Using dummy secrets for pipeline structure testing"
-            echo "ℹ️  FORK NOTE: This will test pipeline logic but not actual publishing"
+            echo "🧪 FORK TESTING MODE: Using real secrets for testing pipeline with actual publishing"
+            echo "ℹ️  FORK NOTE: This will test the complete pipeline including publishing to your test infrastructure"
             
-            # FORK TESTING: Create dummy secrets (for testing pipeline structure only)
+            # FORK TESTING: Check if secrets are configured
+            if [[ -z "${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}" ]]; then
+              echo "❌ ERROR: GCS_SERVICE_ACCOUNT_KEY secret is not configured in your fork"
+              echo "Please add the secret in Repository Settings → Secrets and variables → Actions"
+              exit 1
+            fi
+            
+            if [[ -z "${{ secrets.GHCR_TOKEN }}" ]]; then
+              echo "❌ ERROR: GHCR_TOKEN secret is not configured in your fork"
+              echo "Please add the secret in Repository Settings → Secrets and variables → Actions"
+              exit 1
+            fi
+            
+            # FORK TESTING: Create real secrets for testing
+            echo "🔑 Setting up real secrets for fork testing..."
+            echo '${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}' | base64 -d > /tmp/gcs-key.json
             kubectl create secret generic release-secret \
-              --from-literal=release.json='{"type":"service_account","project_id":"dummy"}' || true
-            kubectl create secret generic ghcr-creds \
-              --from-literal=credentials='{"username":"dummy","password":"dummy"}' || true
+              --from-file=release.json=/tmp/gcs-key.json
+            rm -f /tmp/gcs-key.json  # Clean up temporary file
+            
+            # Create Docker config secret for GHCR
+            kubectl create secret docker-registry ghcr-creds \
+              --docker-server=ghcr.io \
+              --docker-username=${{ github.actor }} \
+              --docker-password='${{ secrets.GHCR_TOKEN }}' \
+              --docker-email=${{ github.actor }}@users.noreply.github.com
           fi
           
           # PRODUCTION & FORK: Create workspace template for pipeline storage
@@ -244,9 +265,9 @@ jobs:
             
             # FORK TESTING PARAMETERS: Safe values for testing
             PACKAGE="github.com/${{ github.repository }}"              # Your fork repository
-            BUCKET="gs://test-nightly-bucket-${{ github.run_id }}/pipeline"  # Temporary test bucket
+            BUCKET="gs://anitha-tekton-nightly-test/pipeline"          # YOUR TEST BUCKET - replace with your actual bucket name
             REGISTRY_PATH="${{ github.repository_owner }}/pipeline-test"     # Your test registry
-            REGISTRY_USER="dummy"                                       # Dummy credentials
+            REGISTRY_USER="${{ github.actor }}"                        # Your GitHub username
             RUN_TESTS="false"                                          # Skip tests for faster iteration
             RETENTION="7"                                              # Shorter retention for testing
             
@@ -347,10 +368,12 @@ jobs:
             # Additional context for fork testing
             if [[ "${{ github.repository }}" != "tektoncd/pipeline" ]]; then
               echo ""
-              echo "🧪 FORK TESTING NOTES:"
+              echo "🧪 FORK TESTING RESULTS:"
               echo "   ✅ Pipeline structure validated"
-              echo "   ⚠️  Publishing will fail with dummy credentials (expected)"
-              echo "   🔍 Check logs above for pipeline logic validation"
+              echo "   ✅ Real secrets used for testing"
+              echo "   📦 Artifacts published to test bucket: gs://anitha-tekton-nightly-test/pipeline"
+              echo "   🐳 Container images published to: ghcr.io/${{ github.repository_owner }}/pipeline-test"
+              echo "   🔍 Check logs above for complete pipeline validation"
             fi
           else
             echo "❌ Pipeline run name not captured - check pipeline start step"
