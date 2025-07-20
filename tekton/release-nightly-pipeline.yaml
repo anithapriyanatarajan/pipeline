@@ -83,7 +83,9 @@ spec:
     - name: unit-tests
       runAfter: [git-clone]
       when:
-        - cel: "'$(params.runTests)' == 'true'"
+        - input: "$(params.runTests)"
+          operator: in
+          values: ["true"]
       taskRef:
         resolver: bundles
         params:
@@ -106,7 +108,9 @@ spec:
     - name: build
       runAfter: [git-clone]
       when:
-        - cel: "'$(params.runTests)' == 'true'"
+        - input: "$(params.runTests)"
+          operator: in
+          values: ["true"]
       taskRef:
         resolver: bundles
         params:
