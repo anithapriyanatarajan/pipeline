@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        kubernetes_version: [v1.30.0, v1.31.0]
+        kubernetes_version: [v1.31.0]
     name: Nightly Pipeline Release (K8s ${{ matrix.kubernetes_version }})
 
     env:
@@ -119,7 +119,8 @@ jobs:
             echo "❌ ERROR: GHCR_TOKEN secret is not configured"
             exit 1
           fi
-          echo "${GCS_SERVICE_ACCOUNT_KEY}" | base64 -d > /tmp/gcs-key.json
+          # Use plain echo, not base64 decoding
+          echo "${GCS_SERVICE_ACCOUNT_KEY}" > /tmp/gcs-key.json
           kubectl create secret generic release-secret \
             --from-file=release.json=/tmp/gcs-key.json
           rm -f /tmp/gcs-key.json
