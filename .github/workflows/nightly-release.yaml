@@ -1,4 +1,4 @@
-name: Tekton Nightly Release (Production Ready)
+name: Tekton Nightly Release
 
 on:
   schedule:
@@ -25,6 +25,7 @@ on:
         required: false
         default: false
         type: boolean
+  # TODO: Uncomment this when we have a fork branch to test with
   push:
     branches:
       - nightly-pipeline-gha
@@ -567,9 +568,6 @@ jobs:
           done
           kubectl get pipeline pipeline-release-nightly -o name
           echo "✅ Pipeline and task verification completed"
-
-      - name: List files in tekton directory
-        run: ls -l tekton/
 
       - name: Create secrets and PVC template
         env:
