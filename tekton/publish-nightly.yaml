@@ -333,19 +333,25 @@ spec:
       echo "   Version: '$(params.versionTag)'"
       
       IMAGES=""
-      echo "   Building image list:"
+      echo "   📋 Extracting actual images from release.yaml..."
+      
+      # Find all images that match our container registry and extract them
       for cmd in $(params.images); do
-        # Check if we're using --preserve-import-paths to determine image name format
-        if find_preserve_import_path $(echo $KO_EXTRA_ARGS); then
-          # Use full package paths when preserve-import-paths is enabled
-          IMAGE_NAME="$(params.package)/cmd/${cmd}:$(params.versionTag)"
+        # Look for images that contain our registry and the command name
+        FOUND_IMAGE=$(grep -o "${CONTAINER_REGISTRY}/${cmd}-[a-f0-9]*:$(params.versionTag)" "${RELEASE_YAML}" | head -1)
+        if [ -n "${FOUND_IMAGE}" ]; then
+          IMAGES="${IMAGES} ${FOUND_IMAGE}"
+          echo "     ✅ Found: ${FOUND_IMAGE}"
         else
-          # Use shortened paths when preserve-import-paths is not used (ko default behavior)
-          IMAGE_NAME="${cmd}:$(params.versionTag)"
+          echo "     ❌ Missing: ${cmd} (pattern: ${CONTAINER_REGISTRY}/${cmd}-*:$(params.versionTag))"
+          # Show what we find for this command
+          echo "     🔍 Available patterns for '${cmd}':"
+          grep -i "${cmd}" "${RELEASE_YAML}" | grep "image:" | head -2 || echo "       None found"
         fi
-        IMAGES="${IMAGES} ${IMAGE_NAME}"
-        echo "     + ${IMAGE_NAME}"
       done
+      
+      # Remove leading space if present
+      IMAGES=$(echo "${IMAGES}" | sed 's/^ *//')
       
       echo "   📋 Final IMAGES variable:"
       echo "   '${IMAGES}'"
