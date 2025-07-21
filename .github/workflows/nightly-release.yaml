@@ -211,6 +211,9 @@ jobs:
           kubectl get pipeline pipeline-release-nightly -o name
           echo "✅ Pipeline verification completed"
 
+      - name: List files in tekton directory
+        run: ls -l tekton/
+
       - name: Test Git Resolver
         run: |
           set -euo pipefail
@@ -242,10 +245,8 @@ jobs:
             taskRef:
               resolver: git
               params:
-                - name: repo
-                  value: ${GIT_REPO}
-                - name: org
-                  value: ${GIT_ORG}
+                - name: url
+                  value: https://github.com/${GIT_ORG}/${GIT_REPO}.git
                 - name: revision
                   value: ${{ steps.latest.outputs.sha }}
                 - name: pathInRepo

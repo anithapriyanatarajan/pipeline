@@ -141,15 +141,10 @@ spec:
       taskRef:
         resolver: git
         params:
-          - name: repo
-            #value: $(params.gitRepo)
-            value: pipeline
-          - name: org
-            #value: $(params.gitOrg)
-            value: anithapriyanatarajan
+          - name: url
+            value: https://github.com/$(params.gitOrg)/$(params.gitRepo).git
           - name: revision
-            #value: $(params.gitRevision)
-            value: nightly-pipeline-gha
+            value: $(params.gitRevision)
           - name: pathInRepo
             value: tekton/publish.yaml
       params:
