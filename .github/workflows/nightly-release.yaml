@@ -26,14 +26,14 @@ on:
         default: false
         type: boolean
   # TODO: Uncomment this when we have a fork branch to test with
-  push:
-    branches:
-      - nightly-pipeline-gha
-    paths:
-      - '.github/workflows/nightly-release.yaml'
-      - 'tekton/**'
-      - 'cmd/**'
-      - 'pkg/**'
+  # push:
+  #   branches:
+  #     - nightly-pipeline-gha
+  #   paths:
+  #     - '.github/workflows/nightly-release.yaml'
+  #     - 'tekton/**'
+  #     - 'cmd/**'
+  #     - 'pkg/**'
 
 env:
   # Global configuration
@@ -700,7 +700,7 @@ jobs:
           validate_param "gitRepo" "${GIT_REPO}" "^[a-zA-Z0-9_.-]+$"
           
           echo "🔍 Git parameters:"
-          echo "   Package: ${PACKAGE}"
+          echo "   Package: ${PACKAGE}" 
           echo "   Git Org: ${GIT_ORG}"
           echo "   Git Repo: ${GIT_REPO}"
           echo "   Git Revision: ${{ env.LATEST_SHA }}"
