@@ -93,8 +93,8 @@ spec:
       taskRef:
         resolver: git
         params:
-          - name: repo
-            value: plumbing
+          - name: url
+            value: https://github.com/tektoncd/plumbing
           - name: org
             value: tektoncd
           - name: revision
