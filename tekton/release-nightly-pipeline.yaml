@@ -139,14 +139,7 @@ spec:
     - name: publish-images
       runAfter: [unit-tests, build]
       taskRef:
-        resolver: git
-        params:
-          - name: url
-            value: https://github.com/$(params.gitOrg)/$(params.gitRepo).git
-          - name: revision
-            value: $(params.gitRevision)
-          - name: pathInRepo
-            value: tekton/publish-nightly.yaml
+        name: publish-release-nightly
       params:
         - name: package
           value: $(params.package)
