@@ -11,6 +11,123 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 [![Go Report Card](https://goreportcard.com/badge/tektoncd/pipeline)](https://goreportcard.com/report/tektoncd/pipeline)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4020/badge)](https://bestpractices.coreinfrastructure.org/projects/4020)
+[![Nightly Release](https://img.shields.io/badge/Nightly-Release-blue?logo=github)](docs/nightly-releases.md)
+
+The Tekton Pipelines project provides k8s-style resources for declaring
+CI/CD-style pipelines.
+
+## 🚀 Quick Start
+
+### For Users
+- [Installing Tekton Pipelines](docs/install.md)
+- [Getting Started Tutorial](https://tekton.dev/docs/getting-started/tasks/)
+- [Browse Examples](examples/)
+
+### For Contributors & Fork Maintainers
+- [Contributing Guide](CONTRIBUTING.md)
+- [Development Setup](DEVELOPMENT.md)
+- **[🌙 Nightly Releases Setup](docs/nightly-releases.md)** - Complete guide for fork maintainers
+- [Fork Validation Script](scripts/validate-fork.sh) - Test your fork setup
+
+---
+
+## 🌙 Nightly Releases
+
+This repository supports automated nightly releases that build and publish development images for testing and early feedback. The nightly release system is **production-ready** and designed to work seamlessly with any fork of the Tekton Pipeline repository.
+
+### 🚀 Quick Start for Fork Maintainers
+
+Get started with nightly releases in under 5 minutes:
+
+1. **One-command setup**:
+   ```bash
+   ./scripts/quick-setup.sh
+   ```
+
+2. **Configure GitHub secrets** (guided by setup script):
+   - `NIGHTLY_RELEASE_TOKEN`: GitHub Personal Access Token with `packages:write` scope
+
+3. **Test your setup**:
+   ```bash
+   # Manual test run
+   gh workflow run nightly-release.yaml --ref nightly-pipeline-gha
+   
+   # Or use comprehensive validation
+   ./scripts/validate-fork.sh
+   ```
+
+### ✨ Enterprise Features
+
+- 🔄 **Automated builds** every night at 03:00 UTC with change detection
+- 🏗️ **Multi-platform images** (amd64, arm64, s390x, ppc64le) built with Tekton Bundles
+- 🔍 **Pre-flight validation** and comprehensive health checks
+- � **Secure publishing** to GitHub Container Registry with image signing
+- 🔒 **Production-ready** with enterprise security, monitoring, and error handling
+- 📊 **Comprehensive testing** with automated validation and quality gates
+- 🔧 **Fork-aware** with automatic configuration detection
+- 📚 **Complete documentation** with troubleshooting and operational guides
+
+### � Documentation Suite
+
+| Document | Purpose |
+|----------|---------|
+| **[Complete Setup Guide](docs/nightly-releases.md)** | Comprehensive documentation covering architecture, setup, configuration, and operations |
+| **[Production Checklist](docs/production-checklist.md)** | Enterprise deployment checklist with security and monitoring guidelines |
+| **[CI/CD Integration](docs/cicd-integration.md)** | Integration patterns with existing CI/CD pipelines and workflows |
+
+### 🛠️ Scripts and Tools
+
+| Script | Purpose |
+|--------|---------|
+| `./scripts/quick-setup.sh` | Interactive setup wizard for new forks with validation |
+| `./scripts/validate-fork.sh` | Comprehensive fork validation with detailed reporting |
+| `./scripts/test-nightly-release.sh` | End-to-end testing framework with Kind cluster setup |
+
+### 🎯 Production Ready
+
+This nightly release system has been designed with enterprise requirements in mind:
+
+- **Security**: Token-based authentication, least-privilege permissions, container security scanning
+- **Reliability**: Comprehensive error handling, retry logic, health checks, and monitoring
+- **Observability**: Detailed logging, metrics collection, and integration with monitoring systems
+- **Scalability**: Multi-platform builds, efficient caching, and optimized resource usage
+- **Maintainability**: Comprehensive documentation, validation tools, and troubleshooting guides
+
+### 🚦 Getting Started
+
+Choose your setup path:
+
+| Use Case | Command | Time Required |
+|----------|---------|---------------|
+| **First-time setup** | `./scripts/quick-setup.sh` | 5 minutes |
+| **Quick validation** | `./scripts/quick-setup.sh --quick` | 2 minutes |
+| **Full testing** | `./scripts/test-nightly-release.sh` | 10-15 minutes |
+| **Production deployment** | See [production checklist](docs/production-checklist.md) | 30 minutes |
+
+### 📊 What Gets Published
+
+Nightly builds publish these container images to `ghcr.io/{your-username}/pipeline/`:
+
+- `cmd/controller:nightly-YYYYMMDD` - Tekton Pipeline Controller
+- `cmd/webhook:nightly-YYYYMMDD` - Admission Webhook  
+- `cmd/events:nightly-YYYYMMDD` - Event Handler
+- `cmd/resolvers:nightly-YYYYMMDD` - Bundle and Git Resolvers
+
+All images are:
+- ✅ Multi-platform (linux/amd64, linux/arm64, linux/s390x, linux/ppc64le)
+- ✅ Security scanned for vulnerabilities
+- ✅ Signed with Cosign for supply chain security
+- ✅ Tagged with date and commit SHA for traceability
+
+### � Related Resources
+
+- **[Tekton Pipeline Documentation](https://tekton.dev/docs/pipelines/)**
+- **[GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)**
+- **[Tekton Bundle Resolver](https://tekton.dev/docs/pipelines/bundle-resolver/)**
+
+For detailed setup instructions, troubleshooting, and advanced configuration, see **[docs/nightly-releases.md](docs/nightly-releases.md)**.
+
+---
 
 The Tekton Pipelines project provides k8s-style resources for declaring
 CI/CD-style pipelines.
