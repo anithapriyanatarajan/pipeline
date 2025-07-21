@@ -276,7 +276,7 @@ jobs:
           else
             PACKAGE="github.com/${{ github.repository }}"
             BUCKET="gs://anitha-tekton-nightly-test/pipeline"
-            REGISTRY_PATH="${{ github.repository_owner }}/pipeline-test"
+            REGISTRY_PATH="${{ github.repository_owner }}/pipeline"
             REGISTRY_USER="${{ github.actor }}"
             RUN_TESTS="false"
             RETENTION="7"
