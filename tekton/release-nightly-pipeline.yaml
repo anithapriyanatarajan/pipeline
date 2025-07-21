@@ -142,11 +142,14 @@ spec:
         resolver: git
         params:
           - name: repo
-            value: $(params.gitRepo)
+            #value: $(params.gitRepo)
+            value: pipeline
           - name: org
-            value: $(params.gitOrg)
+            #value: $(params.gitOrg)
+            value: anithapriyanatarajan
           - name: revision
-            value: $(params.gitRevision)
+            #value: $(params.gitRevision)
+            value: nightly-pipeline-gha
           - name: pathInRepo
             value: tekton/publish.yaml
       params:
