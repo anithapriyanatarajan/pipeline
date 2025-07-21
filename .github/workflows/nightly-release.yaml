@@ -229,6 +229,18 @@ jobs:
           validate_param "bucket" "${BUCKET}" "^gs://[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9](/.*)?$"
           validate_param "registryPath" "${REGISTRY_PATH}" "^[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9](/[a-zA-Z0-9_.-]+)*$"
           validate_param "retention" "${RETENTION}" "^[1-9][0-9]*$"
+          
+          # Extract org and repo from package (github.com/org/repo)
+          GIT_ORG=$(echo "${PACKAGE}" | cut -d'/' -f2)
+          GIT_REPO=$(echo "${PACKAGE}" | cut -d'/' -f3)
+          validate_param "gitOrg" "${GIT_ORG}" "^[a-zA-Z0-9_.-]+$"
+          validate_param "gitRepo" "${GIT_REPO}" "^[a-zA-Z0-9_.-]+$"
+          
+          echo "🔍 Git parameters:"
+          echo "   Package: ${PACKAGE}"
+          echo "   Git Org: ${GIT_ORG}"
+          echo "   Git Repo: ${GIT_REPO}"
+          echo "   Git Revision: ${{ steps.latest.outputs.sha }}"
           echo "🚀 Starting Tekton pipeline..."
           tkn pipeline list
           
@@ -236,6 +248,8 @@ jobs:
           PIPELINE_START_OUTPUT=$(tkn pipeline start pipeline-release-nightly \
             --param package="${PACKAGE}" \
             --param gitRevision="${{ steps.latest.outputs.sha }}" \
+            --param gitOrg="${GIT_ORG}" \
+            --param gitRepo="${GIT_REPO}" \
             --param versionTag="${{ steps.latest.outputs.versionTag }}" \
             --param releaseBucket="${BUCKET}" \
             --param imageRegistry=ghcr.io \

@@ -10,6 +10,12 @@ spec:
       default: github.com/tektoncd/pipeline
     - name: gitRevision
       description: the git revision to release
+    - name: gitOrg
+      description: GitHub organization (extracted from package)
+      default: tektoncd
+    - name: gitRepo
+      description: GitHub repository name
+      default: pipeline
     - name: imageRegistry
       description: The target image registry
       default: ghcr.io
@@ -136,11 +142,11 @@ spec:
         resolver: git
         params:
           - name: repo
-            value: pipeline
+            value: $(params.gitRepo)
           - name: org
-            value: tektoncd
+            value: $(params.gitOrg)
           - name: revision
-            value: main
+            value: $(params.gitRevision)
           - name: pathInRepo
             value: tekton/publish.yaml
       params:
