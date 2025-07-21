@@ -339,6 +339,7 @@ jobs:
             REGISTRY_USER="tekton-robot"
             RUN_TESTS="true"
             RETENTION="30"
+            KO_EXTRA_ARGS="--preserve-import-paths"
           else
             # For fork testing, use a simpler package name that doesn't include the full GitHub path
             PACKAGE="github.com/tektoncd/pipeline"  # Keep using upstream package for compatibility
@@ -347,6 +348,7 @@ jobs:
             REGISTRY_USER="${{ github.actor }}"
             RUN_TESTS="false"
             RETENTION="7"
+            KO_EXTRA_ARGS=""  # Don't use preserve-import-paths for cleaner image names
           fi
           validate_param "package" "${PACKAGE}" "^github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$"
           validate_param "bucket" "${BUCKET}" "^gs://[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9](/.*)?$"
@@ -381,7 +383,7 @@ jobs:
             --param imageRegistryRegions="" \
             --param buildPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le" \
             --param publishPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64" \
-            --param koExtraArgs="--preserve-import-paths" \
+            --param koExtraArgs="${KO_EXTRA_ARGS}" \
             --param serviceAccountPath=release.json \
             --param serviceAccountImagesPath=.dockerconfigjson \
             --param runTests="${RUN_TESTS}" \
