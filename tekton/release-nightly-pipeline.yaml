@@ -220,7 +220,7 @@ spec:
           subPath: bucket
       params:
         - name: location
-          value: $(params.releaseBucket)/nightly/$(params.versionTag)
+          value: $(params.releaseBucket)/previous/$(params.versionTag)
         - name: path
           value: $(params.versionTag)
         - name: serviceAccountPath
@@ -245,7 +245,7 @@ spec:
           subPath: bucket
       params:
         - name: location
-          value: $(params.releaseBucket)/nightly/latest
+          value: $(params.releaseBucket)/latest
         - name: path
           value: $(params.versionTag)
         - name: serviceAccountPath
@@ -384,7 +384,7 @@ spec:
               - name: VERSION_TAG
                 value: $(params.versionTag)
             script: |
-              BASE_URL=$(echo "${RELEASE_BUCKET}/nightly/${VERSION_TAG}")
+              BASE_URL=$(echo "${RELEASE_BUCKET}/previous/${VERSION_TAG}")
               BASE_URL=$(echo ${BASE_URL} | sed 's,gs://,https://storage.googleapis.com/,g')
               echo "${BASE_URL}/release.yaml" > $(results.release.path)
               echo "${BASE_URL}/release.notag.yaml" > $(results.release-no-tag.path)
