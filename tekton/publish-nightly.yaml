@@ -252,60 +252,87 @@ spec:
       #!/bin/sh
       set -ex
 
-      echo "🔍 Koparse Debug Information"
-      echo "=========================="
+      echo "🔍 Koparse Input Debugging"
+      echo "========================="
       
-      # Debug environment variables
-      echo "📋 Environment Variables:"
-      echo "   OUTPUT_RELEASE_DIR: ${OUTPUT_RELEASE_DIR}"
-      echo "   CONTAINER_REGISTRY: ${CONTAINER_REGISTRY}"
-      echo "   KO_EXTRA_ARGS: '${KO_EXTRA_ARGS}'"
-      echo "   Package: $(params.package)"
-      echo "   Version Tag: $(params.versionTag)"
-      echo "   Images: $(params.images)"
-      
-      # Check if output directory exists
-      echo "📁 Directory Check:"
-      if [ -d "${OUTPUT_RELEASE_DIR}" ]; then
-        echo "   ✅ Output directory exists: ${OUTPUT_RELEASE_DIR}"
-        echo "   📋 Contents:"
-        ls -la "${OUTPUT_RELEASE_DIR}" || echo "   ⚠️  Failed to list directory contents"
-      else
-        echo "   ❌ Output directory does not exist: ${OUTPUT_RELEASE_DIR}"
-        echo "   📋 Parent directory contents:"
-        ls -la "$(dirname "${OUTPUT_RELEASE_DIR}")" || echo "   ⚠️  Failed to list parent directory"
-      fi
-      
-      # Check if release.yaml exists and show sample content
+      # Debug the release.yaml file specifically
       RELEASE_YAML="${OUTPUT_RELEASE_DIR}/release.yaml"
-      echo "📄 Release YAML Check:"
+      echo "� Release YAML Analysis:"
+      echo "   Path: ${RELEASE_YAML}"
+      
       if [ -f "${RELEASE_YAML}" ]; then
-        echo "   ✅ Release YAML exists: ${RELEASE_YAML}"
-        echo "   📏 File size: $(wc -c < "${RELEASE_YAML}") bytes"
-        echo "   📋 First 10 lines:"
-        head -10 "${RELEASE_YAML}" || echo "   ⚠️  Failed to read file"
-        echo "   📋 Last 5 lines:"
-        tail -5 "${RELEASE_YAML}" || echo "   ⚠️  Failed to read file"
+        echo "   ✅ File exists"
+        FILE_SIZE=$(wc -c < "${RELEASE_YAML}")
+        echo "   📏 Size: ${FILE_SIZE} bytes"
+        
+        if [ "${FILE_SIZE}" -eq 0 ]; then
+          echo "   ❌ File is EMPTY - this is likely the problem!"
+        else
+          echo "   ✅ File has content"
+          echo "   � First 20 lines:"
+          head -20 "${RELEASE_YAML}"
+          echo "   ..."
+          echo "   📋 Last 10 lines:"
+          tail -10 "${RELEASE_YAML}"
+          
+          # Look for image references in the file
+          echo "   🔍 Searching for image references:"
+          if grep -i "image:" "${RELEASE_YAML}" | head -10; then
+            echo "   ✅ Found image references"
+          else
+            echo "   ❌ No 'image:' lines found in release.yaml"
+          fi
+          
+          # Look for our specific images
+          echo "   🔍 Searching for our expected images:"
+          for cmd in $(params.images); do
+            SEARCH_PATTERN="$(params.package)/cmd/${cmd}"
+            if grep -q "${SEARCH_PATTERN}" "${RELEASE_YAML}"; then
+              echo "   ✅ Found: ${SEARCH_PATTERN}"
+            else
+              echo "   ❌ Missing: ${SEARCH_PATTERN}"
+            fi
+          done
+        fi
       else
-        echo "   ❌ Release YAML does not exist: ${RELEASE_YAML}"
+        echo "   ❌ File does not exist!"
+        echo "   � Output directory contents:"
+        ls -la "${OUTPUT_RELEASE_DIR}" || echo "   Directory doesn't exist"
+        echo "   � Parent directory:"
+        ls -la "$(dirname "${OUTPUT_RELEASE_DIR}")" || echo "   Parent doesn't exist"
+        echo "   🚨 This is the root cause - no release.yaml to parse!"
+        exit 1
       fi
       
-      # Check workspace permissions
-      echo "🔐 Workspace Permissions:"
-      echo "   📁 /workspace permissions:"
-      ls -ld /workspace || echo "   ⚠️  Failed to check /workspace"
-      echo "   📁 Current working directory:"
-      pwd
-      ls -la . || echo "   ⚠️  Failed to list current directory"
+      # Debug the IMAGES variable construction
+      echo ""
+      echo "� IMAGES Variable Construction:"
+      echo "   Input params.images: '$(params.images)'"
+      echo "   Package: '$(params.package)'"
+      echo "   Version: '$(params.versionTag)'"
       
-      # Test if we can write to workspace
-      echo "✍️  Testing write permissions:"
-      if echo "test" > /workspace/write_test.tmp; then
-        echo "   ✅ Can write to /workspace"
-        rm -f /workspace/write_test.tmp
-      else
-        echo "   ❌ Cannot write to /workspace"
+      IMAGES=""
+      echo "   Building image list:"
+      for cmd in $(params.images); do
+        IMAGE_NAME="$(params.package)/cmd/${cmd}:$(params.versionTag)"
+        IMAGES="${IMAGES} ${IMAGE_NAME}"
+        echo "     + ${IMAGE_NAME}"
+      done
+      
+      echo "   📋 Final IMAGES variable:"
+      echo "   '${IMAGES}'"
+      
+      if [ -z "${IMAGES}" ]; then
+        echo "   ❌ IMAGES variable is empty!"
+        exit 1
       fi
+      
+      # Debug other critical variables
+      echo ""
+      echo "🔧 Other Variables:"
+      echo "   CONTAINER_REGISTRY: '${CONTAINER_REGISTRY}'"
+      echo "   Package: '$(params.package)'"
+      echo "   KO_EXTRA_ARGS: '${KO_EXTRA_ARGS}'"
 
       # Find "--preserve-import-paths" in a list of args
       find_preserve_import_path() {
@@ -320,65 +347,48 @@ spec:
       # If "--preserve-import-paths" is used, include "package" in the expected path
       if find_preserve_import_path $(echo $KO_EXTRA_ARGS); then
         PRESERVE_IMPORT_PATH="--preserve-path"
-        echo "🎯 Using --preserve-path flag"
+        echo "   🎯 Flag: --preserve-path"
       else
         PRESERVE_IMPORT_PATH="--no-preserve-path"
-        echo "🎯 Using --no-preserve-path flag"
+        echo "   🎯 Flag: --no-preserve-path"
       fi
-
-      # Always use full package paths for koparse since ko will use them regardless
-      echo "🏗️  Building image list:"
-      IMAGES=""
-      for cmd in $(params.images)
-      do
-        IMAGE_NAME="$(params.package)/cmd/${cmd}:$(params.versionTag)"
-        IMAGES="${IMAGES} ${IMAGE_NAME}"
-        echo "   📦 ${IMAGE_NAME}"
-      done
       
-      echo "📋 Final image list: '${IMAGES}'"
-      echo "🔧 Koparse command will be:"
-      echo "   koparse --path ${RELEASE_YAML} --base $(params.package) --container-registry ${CONTAINER_REGISTRY} --images '${IMAGES}' ${PRESERVE_IMPORT_PATH} > /workspace/built_images"
-      
-      # Verify koparse binary exists and is executable
-      echo "🔍 Koparse Binary Check:"
-      if command -v koparse >/dev/null 2>&1; then
-        echo "   ✅ Koparse binary found"
-        echo "   📋 Version/help:"
-        koparse --help || echo "   ⚠️  Failed to get koparse help"
-      else
-        echo "   ❌ Koparse binary not found in PATH"
-        echo "   📋 Available binaries:"
-        ls -la /usr/local/bin/ || echo "   ⚠️  Failed to list /usr/local/bin"
-      fi
+      # Show the exact command before execution
+      echo ""
+      echo "� Koparse Command:"
+      echo "koparse --path ${RELEASE_YAML} --base $(params.package) --container-registry ${CONTAINER_REGISTRY} --images '${IMAGES}' ${PRESERVE_IMPORT_PATH} > /workspace/built_images"
 
-      # Parse the built images from the release.yaml generated by ko
-      echo "🚀 Running koparse..."
-      # Using sh -c to ensure proper shell handling of redirection
+      # Execute koparse with explicit error handling
+      echo ""
+      echo "▶️  Executing koparse..."
       if sh -c "koparse \
         --path ${RELEASE_YAML} \
         --base $(params.package) \
         --container-registry ${CONTAINER_REGISTRY} \
         --images '${IMAGES}' \
         ${PRESERVE_IMPORT_PATH} > /workspace/built_images"; then
+        
         echo "✅ Koparse completed successfully"
         
-        # Show the results
-        echo "📋 Built images output:"
+        # Verify and show output
         if [ -f /workspace/built_images ]; then
-          echo "   📏 Output file size: $(wc -c < /workspace/built_images) bytes"
-          echo "   📋 Contents:"
-          cat /workspace/built_images || echo "   ⚠️  Failed to read output file"
+          OUTPUT_SIZE=$(wc -c < /workspace/built_images)
+          echo "📊 Output file size: ${OUTPUT_SIZE} bytes"
+          
+          if [ "${OUTPUT_SIZE}" -eq 0 ]; then
+            echo "❌ Output file is empty - koparse found no matching images!"
+          else
+            echo "📋 Built images:"
+            cat /workspace/built_images
+          fi
         else
-          echo "   ❌ Output file not created"
+          echo "❌ Output file was not created"
+          exit 1
         fi
       else
-        echo "❌ Koparse failed"
-        echo "🔍 Debugging information:"
-        echo "   📋 Exit code: $?"
-        echo "   📁 Workspace contents after failure:"
-        ls -la /workspace/ || echo "   ⚠️  Failed to list workspace"
-        exit 1
+        EXIT_CODE=$?
+        echo "❌ Koparse failed with exit code: ${EXIT_CODE}"
+        exit ${EXIT_CODE}
       fi
 
   - name: tag-images
