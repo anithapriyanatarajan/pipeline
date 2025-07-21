@@ -340,7 +340,8 @@ jobs:
             RUN_TESTS="true"
             RETENTION="30"
           else
-            PACKAGE="github.com/${{ github.repository }}"
+            # For fork testing, use a simpler package name that doesn't include the full GitHub path
+            PACKAGE="github.com/tektoncd/pipeline"  # Keep using upstream package for compatibility
             BUCKET="gs://anitha-tekton-nightly-test/pipeline"
             REGISTRY_PATH="${{ github.repository_owner }}/pipeline"
             REGISTRY_USER="${{ github.actor }}"
