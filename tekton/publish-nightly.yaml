@@ -286,11 +286,22 @@ spec:
           # Look for our specific images
           echo "   🔍 Searching for our expected images:"
           for cmd in $(params.images); do
-            SEARCH_PATTERN="$(params.package)/cmd/${cmd}"
+            # Check what pattern to search for based on ko args
+            if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
+              # When using --preserve-import-paths, ko uses full package paths
+              SEARCH_PATTERN="$(params.package)/cmd/${cmd}"
+            else
+              # When NOT using --preserve-import-paths, ko uses registry path + shortened names
+              SEARCH_PATTERN="${CONTAINER_REGISTRY}/${cmd}"
+            fi
+            
             if grep -q "${SEARCH_PATTERN}" "${RELEASE_YAML}"; then
               echo "   ✅ Found: ${SEARCH_PATTERN}"
             else
               echo "   ❌ Missing: ${SEARCH_PATTERN}"
+              # Also show what we actually find that's similar
+              echo "   🔍 Similar patterns found:"
+              grep -i "${cmd}" "${RELEASE_YAML}" | head -3 || echo "     None"
             fi
           done
         fi
@@ -304,6 +315,16 @@ spec:
         exit 1
       fi
       
+      # Find "--preserve-import-paths" in a list of args
+      find_preserve_import_path() {
+        for arg in $@; do
+          if [ "$arg" = "--preserve-import-paths" ]; then
+            return 0
+          fi
+        done
+        return 1
+      }
+      
       # Debug the IMAGES variable construction
       echo ""
       echo "� IMAGES Variable Construction:"
@@ -314,7 +335,14 @@ spec:
       IMAGES=""
       echo "   Building image list:"
       for cmd in $(params.images); do
-        IMAGE_NAME="$(params.package)/cmd/${cmd}:$(params.versionTag)"
+        # Check if we're using --preserve-import-paths to determine image name format
+        if find_preserve_import_path $(echo $KO_EXTRA_ARGS); then
+          # Use full package paths when preserve-import-paths is enabled
+          IMAGE_NAME="$(params.package)/cmd/${cmd}:$(params.versionTag)"
+        else
+          # Use shortened paths when preserve-import-paths is not used (ko default behavior)
+          IMAGE_NAME="${cmd}:$(params.versionTag)"
+        fi
         IMAGES="${IMAGES} ${IMAGE_NAME}"
         echo "     + ${IMAGE_NAME}"
       done
@@ -333,16 +361,6 @@ spec:
       echo "   CONTAINER_REGISTRY: '${CONTAINER_REGISTRY}'"
       echo "   Package: '$(params.package)'"
       echo "   KO_EXTRA_ARGS: '${KO_EXTRA_ARGS}'"
-
-      # Find "--preserve-import-paths" in a list of args
-      find_preserve_import_path() {
-        for arg in $@; do
-          if [ "$arg" = "--preserve-import-paths" ]; then
-            return 0
-          fi
-        done
-        return 1
-      }
 
       # If "--preserve-import-paths" is used, include "package" in the expected path
       if find_preserve_import_path $(echo $KO_EXTRA_ARGS); then
