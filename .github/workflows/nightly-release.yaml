@@ -254,55 +254,159 @@ jobs:
           
           echo "✅ Kubernetes cluster is ready"
 
-      - name: Install Tekton Pipelines
+      - name: Install Tekton Pipelines and verify installation
         run: |
           set -euo pipefail
           
           echo "🔧 Installing Tekton Pipelines..."
           
-          # Install Tekton Pipelines
+          # Install Tekton Pipelines (includes both pipelines and resolvers)
           kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
           
-          # Wait for deployments to be available
-          echo "⏳ Waiting for Tekton controller..."
-          kubectl wait deployment tekton-pipelines-controller -n tekton-pipelines --for=condition=Available=True --timeout=300s
+          # Function to wait for namespace to exist
+          wait_for_namespace() {
+            local namespace=$1
+            echo "⏳ Waiting for namespace $namespace to be created..."
+            for i in {1..30}; do
+              if kubectl get namespace "$namespace" >/dev/null 2>&1; then
+                echo "✅ Namespace $namespace exists"
+                return 0
+              fi
+              echo "   Attempt $i/30: Waiting for namespace $namespace..."
+              sleep 2
+            done
+            echo "❌ Timeout waiting for namespace $namespace"
+            return 1
+          }
           
-          echo "⏳ Waiting for Tekton webhook..."
-          kubectl wait deployment tekton-pipelines-webhook -n tekton-pipelines --for=condition=Available=True --timeout=300s
+          # Function to wait for all deployments in a namespace
+          wait_for_deployments() {
+            local namespace=$1
+            echo "⏳ Waiting for deployments in namespace $namespace..."
+            
+            # Wait for deployments to exist first
+            for i in {1..30}; do
+              local deployments=$(kubectl get deployments -n "$namespace" --no-headers 2>/dev/null | wc -l)
+              if [[ $deployments -gt 0 ]]; then
+                echo "✅ Found $deployments deployment(s) in $namespace"
+                break
+              fi
+              echo "   Attempt $i/30: Waiting for deployments in $namespace..."
+              sleep 2
+            done
+            
+            # Now wait for each deployment to be available
+            local deployments=($(kubectl get deployments -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null))
+            for deployment in "${deployments[@]}"; do
+              echo "⏳ Waiting for deployment $deployment in $namespace..."
+              kubectl wait deployment "$deployment" -n "$namespace" --for=condition=Available=True --timeout=180s
+              echo "✅ Deployment $deployment is available"
+            done
+          }
           
-          # Wait for pods to be ready
-          echo "⏳ Waiting for all Tekton pods..."
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/part-of=tekton-pipelines -n tekton-pipelines --timeout=300s
+          # Function to wait for all pods in a namespace
+          wait_for_pods() {
+            local namespace=$1
+            local label_selector=${2:-""}
+            echo "⏳ Waiting for pods in namespace $namespace..."
+            
+            # Build kubectl command with optional label selector
+            local kubectl_cmd="kubectl wait --for=condition=ready pod -n $namespace --timeout=180s"
+            if [[ -n "$label_selector" ]]; then
+              kubectl_cmd="$kubectl_cmd -l $label_selector"
+            else
+              kubectl_cmd="$kubectl_cmd --all"
+            fi
+            
+            # Wait for pods to exist first
+            for i in {1..30}; do
+              local pod_count=$(kubectl get pods -n "$namespace" --no-headers 2>/dev/null | wc -l)
+              if [[ $pod_count -gt 0 ]]; then
+                echo "✅ Found $pod_count pod(s) in $namespace"
+                break
+              fi
+              echo "   Attempt $i/30: Waiting for pods in $namespace..."
+              sleep 2
+            done
+            
+            # Now wait for pods to be ready
+            eval "$kubectl_cmd"
+            echo "✅ All pods in $namespace are ready"
+          }
           
-          # Display status
-          echo "📋 Tekton installation status:"
-          kubectl get pods -n tekton-pipelines
-          kubectl get deployments -n tekton-pipelines
+          # Function to display namespace status
+          show_namespace_status() {
+            local namespace=$1
+            echo "📋 Status for namespace: $namespace"
+            echo "   Deployments:"
+            kubectl get deployments -n "$namespace" -o wide 2>/dev/null || echo "   No deployments found"
+            echo "   Pods:"
+            kubectl get pods -n "$namespace" -o wide 2>/dev/null || echo "   No pods found"
+            echo "   Services:"
+            kubectl get services -n "$namespace" 2>/dev/null || echo "   No services found"
+            echo ""
+          }
           
-          echo "✅ Tekton Pipelines installation completed"
-
-      - name: Install Tekton Bundle Resolvers
-        run: |
-          set -euo pipefail
+          # Wait for both namespaces to be created
+          wait_for_namespace "tekton-pipelines"
+          wait_for_namespace "tekton-pipelines-resolvers"
           
-          echo "🔧 Installing Tekton bundle resolvers..."
+          # Wait for deployments in tekton-pipelines namespace
+          echo "🔧 Processing tekton-pipelines namespace..."
+          wait_for_deployments "tekton-pipelines"
+          wait_for_pods "tekton-pipelines" "app.kubernetes.io/part-of=tekton-pipelines"
           
-          # Install resolvers
-          kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/resolvers.yaml
+          # Wait for deployments in tekton-pipelines-resolvers namespace
+          echo "🔧 Processing tekton-pipelines-resolvers namespace..."
+          wait_for_deployments "tekton-pipelines-resolvers"
+          wait_for_pods "tekton-pipelines-resolvers"
           
-          # Wait for resolver deployments
-          echo "⏳ Waiting for bundle resolver..."
-          kubectl wait deployment tekton-pipelines-remote-resolvers -n tekton-pipelines-resolvers --for=condition=Available=True --timeout=300s
+          # Display comprehensive status for both namespaces
+          echo "� Complete Tekton Installation Status"
+          echo "======================================"
+          show_namespace_status "tekton-pipelines"
+          show_namespace_status "tekton-pipelines-resolvers"
           
-          # Wait for resolver pods
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/part-of=tekton-pipelines-resolvers -n tekton-pipelines-resolvers --timeout=300s
+          # Final verification - check that key components are running
+          echo "🔍 Final verification checks..."
           
-          # Display resolver status
-          echo "📋 Resolver installation status:"
-          kubectl get pods -n tekton-pipelines-resolvers
-          kubectl get deployments -n tekton-pipelines-resolvers
+          # Check controller
+          if kubectl get deployment tekton-pipelines-controller -n tekton-pipelines >/dev/null 2>&1; then
+            echo "✅ Tekton controller deployment found"
+          else
+            echo "❌ Tekton controller deployment not found"
+            exit 1
+          fi
           
-          echo "✅ Bundle resolvers installation completed"
+          # Check webhook
+          if kubectl get deployment tekton-pipelines-webhook -n tekton-pipelines >/dev/null 2>&1; then
+            echo "✅ Tekton webhook deployment found"
+          else
+            echo "❌ Tekton webhook deployment not found"
+            exit 1
+          fi
+          
+          # Check resolvers (may have different deployment names)
+          resolver_deployments=$(kubectl get deployments -n tekton-pipelines-resolvers --no-headers 2>/dev/null | wc -l)
+          if [[ $resolver_deployments -gt 0 ]]; then
+            echo "✅ Found $resolver_deployments resolver deployment(s)"
+          else
+            echo "⚠️  No resolver deployments found (may be starting up)"
+          fi
+          
+          # Check overall pod health
+          failed_pods_pipelines=$(kubectl get pods -n tekton-pipelines --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+          failed_pods_resolvers=$(kubectl get pods -n tekton-pipelines-resolvers --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+          
+          if [[ $failed_pods_pipelines -eq 0 && $failed_pods_resolvers -eq 0 ]]; then
+            echo "✅ All pods in both namespaces are running successfully"
+          else
+            echo "⚠️  Some pods may not be running:"
+            [[ $failed_pods_pipelines -gt 0 ]] && echo "   - $failed_pods_pipelines non-running pods in tekton-pipelines"
+            [[ $failed_pods_resolvers -gt 0 ]] && echo "   - $failed_pods_resolvers non-running pods in tekton-pipelines-resolvers"
+          fi
+          
+          echo "🎉 Tekton Pipelines installation and verification completed!"
 
       - name: Configure Tekton Git Resolver
         env:
