@@ -180,6 +180,9 @@ spec:
       #!/usr/bin/env sh
       set -ex
 
+      # Fix Git ownership issue for the repository directory
+      git config --global --add safe.directory ${PROJECT_ROOT}
+
       # Use the generated `.ko.yaml`
       export KO_CONFIG_PATH=/workspace
       cat ${KO_CONFIG_PATH}/.ko.yaml
