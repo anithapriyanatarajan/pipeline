@@ -117,19 +117,65 @@ jobs:
           # Wait for the restart to complete
           kubectl rollout status deployment/tekton-pipelines-remote-resolvers -n tekton-pipelines-resolvers --timeout=120s || echo "Timeout waiting for restart"
           
-          # Give resolvers time to pick up the new config
-          sleep 10
+          # Give resolvers time to pick up the new config and be fully ready
+          echo "⏳ Waiting for resolvers to be fully ready..."
+          sleep 30
+          
+          # Verify resolver pods are running
+          kubectl get pods -n tekton-pipelines-resolvers -l app.kubernetes.io/name=resolvers || echo "No resolver pods found"
+          
+          # Check if resolver service is accessible
+          kubectl get services -n tekton-pipelines-resolvers || echo "No services in resolvers namespace"
           
           echo "✅ Git resolver configured"
 
       - name: Debug Tekton Installation
         run: |
           set -euo pipefail
+          echo "🔍 Tekton Installation Debug Information"
+          echo "============================================"
+          
+          echo "📦 Deployments in tekton-pipelines namespace:"
           kubectl get deployments -n tekton-pipelines -o wide
+          
+          echo "📦 Deployments in tekton-pipelines-resolvers namespace:"
+          kubectl get deployments -n tekton-pipelines-resolvers -o wide || echo "No tekton-pipelines-resolvers namespace"
+          
+          echo "🏃 Pods in tekton-pipelines namespace:"
           kubectl get pods -n tekton-pipelines -o wide
+          
+          echo "🏃 Pods in tekton-pipelines-resolvers namespace:"
+          kubectl get pods -n tekton-pipelines-resolvers -o wide || echo "No tekton-pipelines-resolvers namespace"
+          
+          echo "🌐 Services in tekton-pipelines namespace:"
           kubectl get services -n tekton-pipelines
+          
+          echo "📋 ConfigMaps in tekton-pipelines-resolvers namespace:"
+          kubectl get configmaps -n tekton-pipelines-resolvers || echo "No tekton-pipelines-resolvers namespace"
+          
+          echo "🔐 Secrets in tekton-pipelines-resolvers namespace:"
+          kubectl get secrets -n tekton-pipelines-resolvers | grep git-resolver || echo "No git-resolver secret found"
+          
+          echo "🔐 Secrets in default namespace:"
+          kubectl get secrets -n default | grep git-resolver || echo "No git-resolver secret found"
+          
+          echo "🎯 Webhook configurations:"
           kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io | grep tekton || echo "No Tekton webhooks found"
+          
+          echo "📝 Recent events in tekton-pipelines namespace:"
           kubectl get events -n tekton-pipelines --sort-by='.lastTimestamp' | tail -10 || echo "No events found"
+          
+          echo "📝 Recent events in tekton-pipelines-resolvers namespace:"
+          kubectl get events -n tekton-pipelines-resolvers --sort-by='.lastTimestamp' | tail -10 || echo "No events found"
+          
+          echo "🔧 Git resolver configuration:"
+          kubectl get configmap git-resolver-config -n tekton-pipelines-resolvers -o yaml || echo "Git resolver config not found"
+          
+          echo "🏁 Feature flags configuration:"
+          kubectl get configmap resolvers-feature-flags -n tekton-pipelines-resolvers -o yaml || echo "Feature flags config not found"
+          
+          echo "🔍 Resolver pod logs (if available):"
+          kubectl logs -n tekton-pipelines-resolvers -l app.kubernetes.io/name=resolvers --tail=50 || echo "No resolver logs found"
 
       - name: Install tkn CLI
         run: |
@@ -164,6 +210,67 @@ jobs:
           done
           kubectl get pipeline pipeline-release-nightly -o name
           echo "✅ Pipeline verification completed"
+
+      - name: Test Git Resolver
+        run: |
+          set -euo pipefail
+          echo "🧪 Testing Git resolver functionality..."
+          
+          # Extract org and repo from the package for testing
+          if [[ "${{ github.repository }}" == "tektoncd/pipeline" ]]; then
+            PACKAGE="github.com/tektoncd/pipeline"
+          else
+            PACKAGE="github.com/${{ github.repository }}"
+          fi
+          
+          GIT_ORG=$(echo "${PACKAGE}" | cut -d'/' -f2)
+          GIT_REPO=$(echo "${PACKAGE}" | cut -d'/' -f3)
+          
+          echo "Testing Git resolver with:"
+          echo "  Org: ${GIT_ORG}"
+          echo "  Repo: ${GIT_REPO}"
+          echo "  Revision: ${{ steps.latest.outputs.sha }}"
+          echo "  Path: tekton/publish.yaml"
+          
+          # Create a simple test task to verify Git resolver works
+          cat << EOF > test-git-resolver.yaml
+          apiVersion: tekton.dev/v1beta1
+          kind: TaskRun
+          metadata:
+            name: test-git-resolver
+          spec:
+            taskRef:
+              resolver: git
+              params:
+                - name: repo
+                  value: ${GIT_REPO}
+                - name: org
+                  value: ${GIT_ORG}
+                - name: revision
+                  value: ${{ steps.latest.outputs.sha }}
+                - name: pathInRepo
+                  value: tekton/publish.yaml
+            params: []
+          EOF
+          
+          echo "📋 Test TaskRun definition:"
+          cat test-git-resolver.yaml
+          
+          echo "🚀 Applying test TaskRun..."
+          kubectl apply -f test-git-resolver.yaml
+          
+          echo "⏳ Waiting for TaskRun to complete..."
+          kubectl wait taskrun test-git-resolver --for=condition=Succeeded=True --timeout=60s || {
+            echo "❌ TaskRun failed or timed out"
+            echo "TaskRun status:"
+            kubectl describe taskrun test-git-resolver
+            echo "TaskRun logs:"
+            kubectl logs -l tekton.dev/taskRun=test-git-resolver || echo "No logs available"
+            exit 1
+          }
+          
+          echo "✅ Git resolver test completed successfully"
+          kubectl delete taskrun test-git-resolver
 
       - name: Create secrets and PVC template
         env:
