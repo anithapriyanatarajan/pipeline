@@ -98,7 +98,7 @@ spec:
           - name: org
             value: tektoncd
           - name: revision
-            value: aeed19e5a36f335ebfdc4b96fa78d1ce5bb4f7b8
+            value: main
           - name: pathInRepo
             value: tekton/resources/release/base/prerelease_checks.yaml
       params:
