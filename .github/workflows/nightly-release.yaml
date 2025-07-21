@@ -11,6 +11,10 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     strategy:
       matrix:
         kubernetes_version: [v1.31.0]
@@ -65,7 +69,7 @@ jobs:
 
       - name: Configure Tekton Git Resolver
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN || secrets.GHCR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
           set -euo pipefail
           echo "🔧 Configuring Tekton Git resolver..."
@@ -217,7 +221,7 @@ jobs:
       - name: Create secrets and PVC template
         env:
           GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
           set -euo pipefail
           if [[ -z "${GCS_SERVICE_ACCOUNT_KEY}" ]]; then
@@ -228,6 +232,55 @@ jobs:
             echo "❌ ERROR: GHCR_TOKEN secret is not configured"
             exit 1
           fi
+          
+          echo "🔍 Debug: Container registry authentication"
+          echo "   Registry: ghcr.io"
+          echo "   Username: ${{ github.actor }}"
+          echo "   Token length: ${#GHCR_TOKEN}"
+          echo "   Repository: ${{ github.repository }}"
+          echo "   Target path: ghcr.io/${{ github.repository_owner }}/pipeline/"
+          
+          # Check if repository is public
+          echo "🔍 Repository visibility check..."
+          if [[ "${{ github.event.repository.private }}" == "true" ]]; then
+            echo "   Repository is PRIVATE - packages will be private by default"
+          else
+            echo "   Repository is PUBLIC - packages should be pushable"
+          fi
+          
+          # Test authentication with GitHub Container Registry
+          echo "🧪 Testing GHCR authentication..."
+          if echo "${GHCR_TOKEN}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin; then
+            echo "✅ GHCR login successful"
+          else
+            echo "❌ GHCR login failed"
+            echo "🔍 Troubleshooting steps:"
+            echo "   1. Check if GHCR_TOKEN secret has 'write:packages' scope"
+            echo "   2. Check if repository has GitHub Packages enabled"
+            echo "   3. Verify token belongs to the correct user"
+            exit 1
+          fi
+          
+          # Test repository access by trying to pull a small image (if it exists)
+          echo "🧪 Testing repository access..."
+          docker pull hello-world:latest >/dev/null 2>&1 || echo "Basic docker pull works"
+          
+          # Try to push a test tag to verify permissions
+          echo "🧪 Testing push permissions..."
+          if docker tag hello-world:latest ghcr.io/${{ github.repository_owner }}/pipeline/test:latest; then
+            echo "✅ Tag creation successful"
+            if docker push ghcr.io/${{ github.repository_owner }}/pipeline/test:latest; then
+              echo "✅ Test push successful - GHCR permissions are working"
+              # Clean up test image
+              docker rmi ghcr.io/${{ github.repository_owner }}/pipeline/test:latest || true
+            else
+              echo "❌ Test push failed - check package permissions"
+              echo "🔍 This might be the same issue affecting the pipeline"
+            fi
+          else
+            echo "❌ Tag creation failed"
+          fi
+          
           # Use plain echo, not base64 decoding
           echo "${GCS_SERVICE_ACCOUNT_KEY}" > /tmp/gcs-key.json
           kubectl create secret generic release-secret \
