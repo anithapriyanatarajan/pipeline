@@ -60,6 +60,7 @@ jobs:
           kubectl wait deployment tekton-pipelines-controller -n tekton-pipelines --for=condition=Available=True --timeout=180s
           kubectl wait deployment tekton-pipelines-webhook -n tekton-pipelines --for=condition=Available=True --timeout=180s
           kubectl wait --for=condition=ready pod -l app=tekton-pipelines-webhook -n tekton-pipelines --timeout=180s
+          kubectl logs -n tekton-pipelines -l app=tekton-pipelines-webhook
           echo "✅ Tekton Pipelines installation completed"
 
       - name: Configure Tekton Git Resolver
