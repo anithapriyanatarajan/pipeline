@@ -190,14 +190,7 @@ jobs:
       - name: Apply Nightly Pipeline Definition
         run: |
           set -euo pipefail
-          for i in {1..10}; do
-            if kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io webhook.pipeline.tekton.dev >/dev/null 2>&1; then
-              echo "✅ Tekton webhook configuration found"
-              break
-            fi
-            echo "⏳ Waiting for webhook configuration... (attempt $i/10)"
-            sleep 5
-          done
+
           for i in {1..5}; do
             if kubectl apply -f tekton/release-nightly-pipeline.yaml; then
               echo "✅ Pipeline applied successfully"
