@@ -337,8 +337,9 @@ spec:
       
       # Find all images that match our container registry and extract them
       for cmd in $(params.images); do
-        # Look for images that contain our registry and the command name
+        # Look for the tagged format: registry/cmd-hash:version
         FOUND_IMAGE=$(grep -o "${CONTAINER_REGISTRY}/${cmd}-[a-f0-9]*:$(params.versionTag)" "${RELEASE_YAML}" | head -1)
+        
         if [ -n "${FOUND_IMAGE}" ]; then
           IMAGES="${IMAGES} ${FOUND_IMAGE}"
           echo "     ✅ Found: ${FOUND_IMAGE}"
@@ -346,7 +347,7 @@ spec:
           echo "     ❌ Missing: ${cmd} (pattern: ${CONTAINER_REGISTRY}/${cmd}-*:$(params.versionTag))"
           # Show what we find for this command
           echo "     🔍 Available patterns for '${cmd}':"
-          grep -i "${cmd}" "${RELEASE_YAML}" | grep "image:" | head -2 || echo "       None found"
+          grep -i "${cmd}" "${RELEASE_YAML}" | grep "${CONTAINER_REGISTRY}" | head -2 || echo "       None found"
         fi
       done
       
