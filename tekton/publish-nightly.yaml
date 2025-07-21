@@ -14,7 +14,7 @@ spec:
       default: "controller webhook entrypoint nop workingdirinit resolvers sidecarlogresults events"
     - name: koExtraArgs
       description: Extra args to be passed to ko
-      default: "--preserve-import-paths"
+      default: ""
     - name: versionTag
       description: The vX.Y.Z version that the artifacts should be tagged with (including `v`)
     - name: imageRegistry
