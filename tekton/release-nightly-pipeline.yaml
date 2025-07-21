@@ -146,7 +146,7 @@ spec:
           - name: revision
             value: $(params.gitRevision)
           - name: pathInRepo
-            value: tekton/publish.yaml
+            value: tekton/publish-nightly.yaml
       params:
         - name: package
           value: $(params.package)

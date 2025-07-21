@@ -190,7 +190,27 @@ jobs:
       - name: Apply Nightly Pipeline Definition
         run: |
           set -euo pipefail
-
+          
+          # Apply the nightly publish task first
+          echo "📝 Applying nightly publish task..."
+          for i in {1..5}; do
+            if kubectl apply -f tekton/publish-nightly.yaml; then
+              echo "✅ Nightly publish task applied successfully"
+              break
+            else
+              echo "⚠️  Failed to apply nightly publish task (attempt $i/5)"
+              if [ $i -eq 5 ]; then
+                echo "❌ Failed to apply nightly publish task after 5 attempts"
+                exit 1
+              fi
+              echo "⏳ Waiting 10 seconds before retry..."
+              sleep 10
+            fi
+          done
+          kubectl get task publish-release-nightly -o name
+          
+          # Apply the nightly pipeline
+          echo "📝 Applying nightly pipeline..."
           for i in {1..5}; do
             if kubectl apply -f tekton/release-nightly-pipeline.yaml; then
               echo "✅ Pipeline applied successfully"
@@ -206,7 +226,7 @@ jobs:
             fi
           done
           kubectl get pipeline pipeline-release-nightly -o name
-          echo "✅ Pipeline verification completed"
+          echo "✅ Pipeline and task verification completed"
 
       - name: List files in tekton directory
         run: ls -l tekton/
@@ -362,7 +382,7 @@ jobs:
             --param publishPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64" \
             --param koExtraArgs="--preserve-import-paths" \
             --param serviceAccountPath=release.json \
-            --param serviceAccountImagesPath=credentials \
+            --param serviceAccountImagesPath=.dockerconfigjson \
             --param runTests="${RUN_TESTS}" \
             --param retentionDays="${RETENTION}" \
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
