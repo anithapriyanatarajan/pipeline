@@ -266,7 +266,6 @@ jobs:
           # Function to wait for namespace to exist
           wait_for_namespace() {
             local namespace=$1
-            echo "⏳ Waiting for namespace $namespace to be created..."
             for i in {1..30}; do
               if kubectl get namespace "$namespace" >/dev/null 2>&1; then
                 echo "✅ Namespace $namespace exists"
