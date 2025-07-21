@@ -70,8 +70,14 @@ jobs:
           set -euo pipefail
           echo "🔧 Configuring Tekton Git resolver..."
 
-          kubectl get cm -n tekton-pipelines-resolvers
-          kubectl get pods -A
+          for i in {1..10}; do
+            if kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io webhook.pipeline.tekton.dev >/dev/null 2>&1; then
+              echo "✅ Tekton webhook configuration found"
+              break
+            fi
+            echo "⏳ Waiting for webhook configuration... (attempt $i/10)"
+            sleep 5
+          done
           
           # Create secret for Git resolver API token in both namespaces
           # 1. In tekton-pipelines-resolvers namespace for the Git resolver itself
