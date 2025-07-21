@@ -72,11 +72,16 @@ jobs:
           kubectl get cm -n tekton-pipelines-resolvers
           kubectl get pods -A
           
-          # Create secret for Git resolver API token in the namespace where pipelines will run.
-          # The current would be default
+          # Create secret for Git resolver API token in both namespaces
+          # 1. In tekton-pipelines-resolvers namespace for the Git resolver itself
           kubectl create secret generic git-resolver-secret \
             --from-literal=token="${GITHUB_TOKEN}" \
-            -n default || echo "Secret may already exist"
+            -n tekton-pipelines-resolvers || echo "Secret may already exist in tekton-pipelines-resolvers"
+          
+          # 2. In default namespace for pipeline tasks that may need it
+          kubectl create secret generic git-resolver-secret \
+            --from-literal=token="${GITHUB_TOKEN}" \
+            -n default || echo "Secret may already exist in default"
           
           # Enable resolvers in feature flags
           kubectl patch configmap resolvers-feature-flags -n tekton-pipelines-resolvers --patch='
@@ -101,6 +106,12 @@ jobs:
           
           # Restart the resolvers to pick up the new configuration
           kubectl rollout restart deployment/tekton-pipelines-remote-resolvers -n tekton-pipelines-resolvers || echo "Resolvers deployment may not exist"
+          
+          # Wait for the restart to complete
+          kubectl rollout status deployment/tekton-pipelines-remote-resolvers -n tekton-pipelines-resolvers --timeout=120s || echo "Timeout waiting for restart"
+          
+          # Give resolvers time to pick up the new config
+          sleep 10
           
           echo "✅ Git resolver configured"
 
