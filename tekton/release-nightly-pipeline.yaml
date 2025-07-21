@@ -70,12 +70,14 @@ spec:
   tasks:
     - name: git-clone
       taskRef:
-        resolver: hub
+        resolver: bundles
         params:
+          - name: bundle
+            value: ghcr.io/tektoncd/catalog/upstream/tasks/git-clone:0.10
           - name: name
             value: git-clone
-          - name: version
-            value: "0.10"
+          - name: kind
+            value: task
       workspaces:
         - name: output
           workspace: workarea
@@ -104,6 +106,8 @@ spec:
       params:
         - name: package
           value: $(params.package)
+        - name: packages
+          value: "./..."
         - name: flags
           value: -v -mod=vendor
       workspaces:
