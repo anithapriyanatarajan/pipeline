@@ -246,176 +246,41 @@ spec:
       # Rewrite "devel" to params.versionTag
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.yaml
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.notags.yaml
+ 
   - name: koparse
     image: ghcr.io/tektoncd/plumbing/koparse@sha256:1898ef549aaff602d06c049136aaf1c1eacc573846c42bbf42d8dc9258235204
     script: |
-      #!/bin/sh
       set -ex
 
-      echo "🔍 Koparse Input Debugging"
-      echo "========================="
-      
-      # Debug the release.yaml file specifically
-      RELEASE_YAML="${OUTPUT_RELEASE_DIR}/release.yaml"
-      echo "� Release YAML Analysis:"
-      echo "   Path: ${RELEASE_YAML}"
-      
-      if [ -f "${RELEASE_YAML}" ]; then
-        echo "   ✅ File exists"
-        FILE_SIZE=$(wc -c < "${RELEASE_YAML}")
-        echo "   📏 Size: ${FILE_SIZE} bytes"
-        
-        if [ "${FILE_SIZE}" -eq 0 ]; then
-          echo "   ❌ File is EMPTY - this is likely the problem!"
-        else
-          echo "   ✅ File has content"
-          echo "   � First 20 lines:"
-          head -20 "${RELEASE_YAML}"
-          echo "   ..."
-          echo "   📋 Last 10 lines:"
-          tail -10 "${RELEASE_YAML}"
-          
-          # Look for image references in the file
-          echo "   🔍 Searching for image references:"
-          if grep -i "image:" "${RELEASE_YAML}" | head -10; then
-            echo "   ✅ Found image references"
-          else
-            echo "   ❌ No 'image:' lines found in release.yaml"
-          fi
-          
-          # Look for our specific images
-          echo "   🔍 Searching for our expected images:"
-          for cmd in $(params.images); do
-            # Check what pattern to search for based on ko args
-            if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
-              # When using --preserve-import-paths, ko uses full package paths
-              SEARCH_PATTERN="$(params.package)/cmd/${cmd}"
-            else
-              # When NOT using --preserve-import-paths, ko uses registry path + shortened names
-              SEARCH_PATTERN="${CONTAINER_REGISTRY}/${cmd}"
-            fi
-            
-            if grep -q "${SEARCH_PATTERN}" "${RELEASE_YAML}"; then
-              echo "   ✅ Found: ${SEARCH_PATTERN}"
-            else
-              echo "   ❌ Missing: ${SEARCH_PATTERN}"
-              # Also show what we actually find that's similar
-              echo "   🔍 Similar patterns found:"
-              grep -i "${cmd}" "${RELEASE_YAML}" | head -3 || echo "     None"
-            fi
-          done
-        fi
-      else
-        echo "   ❌ File does not exist!"
-        echo "   � Output directory contents:"
-        ls -la "${OUTPUT_RELEASE_DIR}" || echo "   Directory doesn't exist"
-        echo "   � Parent directory:"
-        ls -la "$(dirname "${OUTPUT_RELEASE_DIR}")" || echo "   Parent doesn't exist"
-        echo "   🚨 This is the root cause - no release.yaml to parse!"
-        exit 1
-      fi
-      
       # Find "--preserve-import-paths" in a list of args
-      find_preserve_import_path() {
+      function find_preserve_import_path() {
         for arg in $@; do
-          if [ "$arg" = "--preserve-import-paths" ]; then
+          if [[ "$arg" == "--preserve-import-paths" ]]; then
             return 0
           fi
         done
         return 1
       }
-      
-      # Debug the IMAGES variable construction
-      echo ""
-      echo "� IMAGES Variable Construction:"
-      echo "   Input params.images: '$(params.images)'"
-      echo "   Package: '$(params.package)'"
-      echo "   Version: '$(params.versionTag)'"
-      
-      IMAGES=""
-      echo "   📋 Extracting actual images from release.yaml..."
-      
-      # Find all images that match our container registry and extract them
-      for cmd in $(params.images); do
-        # Look for the tagged format: registry/cmd-hash:version
-        FOUND_IMAGE=$(grep -o "${CONTAINER_REGISTRY}/${cmd}-[a-f0-9]*:$(params.versionTag)" "${RELEASE_YAML}" | head -1)
-        
-        if [ -n "${FOUND_IMAGE}" ]; then
-          IMAGES="${IMAGES} ${FOUND_IMAGE}"
-          echo "     ✅ Found: ${FOUND_IMAGE}"
-        else
-          echo "     ❌ Missing: ${cmd} (pattern: ${CONTAINER_REGISTRY}/${cmd}-*:$(params.versionTag))"
-          # Show what we find for this command
-          echo "     🔍 Available patterns for '${cmd}':"
-          grep -i "${cmd}" "${RELEASE_YAML}" | grep "${CONTAINER_REGISTRY}" | head -2 || echo "       None found"
-        fi
-      done
-      
-      # Remove leading space if present
-      IMAGES=$(echo "${IMAGES}" | sed 's/^ *//')
-      
-      echo "   📋 Final IMAGES variable:"
-      echo "   '${IMAGES}'"
-      
-      if [ -z "${IMAGES}" ]; then
-        echo "   ❌ IMAGES variable is empty!"
-        exit 1
-      fi
-      
-      # Debug other critical variables
-      echo ""
-      echo "🔧 Other Variables:"
-      echo "   CONTAINER_REGISTRY: '${CONTAINER_REGISTRY}'"
-      echo "   Package: '$(params.package)'"
-      echo "   KO_EXTRA_ARGS: '${KO_EXTRA_ARGS}'"
 
       # If "--preserve-import-paths" is used, include "package" in the expected path
-      if find_preserve_import_path $(echo $KO_EXTRA_ARGS); then
-        PRESERVE_IMPORT_PATH="--preserve-path"
-        echo "   🎯 Flag: --preserve-path"
-      else
+      find_preserve_import_path \
+        $(echo $KO_EXTRA_ARGS) && \
+        PRESERVE_IMPORT_PATH="--preserve-path" || \
         PRESERVE_IMPORT_PATH="--no-preserve-path"
-        echo "   🎯 Flag: --no-preserve-path"
-      fi
-      
-      # Show the exact command before execution
-      echo ""
-      echo "� Koparse Command:"
-      echo "koparse --path ${RELEASE_YAML} --base $(params.package) --container-registry ${CONTAINER_REGISTRY} --images '${IMAGES}' ${PRESERVE_IMPORT_PATH} > /workspace/built_images"
 
-      # Execute koparse with explicit error handling
-      echo ""
-      echo "▶️  Executing koparse..."
-      if sh -c "koparse \
-        --path ${RELEASE_YAML} \
+      for cmd in $(params.images)
+      do
+        IMAGES="${IMAGES} $(params.package)/cmd/${cmd}:$(params.versionTag)"
+      done
+
+      # Parse the built images from the release.yaml generated by ko
+      koparse \
+        --path $OUTPUT_RELEASE_DIR/release.yaml \
         --base $(params.package) \
         --container-registry ${CONTAINER_REGISTRY} \
-        --images '${IMAGES}' \
-        ${PRESERVE_IMPORT_PATH} > /workspace/built_images"; then
-        
-        echo "✅ Koparse completed successfully"
-        
-        # Verify and show output
-        if [ -f /workspace/built_images ]; then
-          OUTPUT_SIZE=$(wc -c < /workspace/built_images)
-          echo "📊 Output file size: ${OUTPUT_SIZE} bytes"
-          
-          if [ "${OUTPUT_SIZE}" -eq 0 ]; then
-            echo "❌ Output file is empty - koparse found no matching images!"
-          else
-            echo "📋 Built images:"
-            cat /workspace/built_images
-          fi
-        else
-          echo "❌ Output file was not created"
-          exit 1
-        fi
-      else
-        EXIT_CODE=$?
-        echo "❌ Koparse failed with exit code: ${EXIT_CODE}"
-        exit ${EXIT_CODE}
-      fi
-
+        --images ${IMAGES} \
+        ${PRESERVE_IMPORT_PATH} > /workspace/built_images
+      
   - name: tag-images
     image: cgr.dev/chainguard/crane:latest-dev@sha256:68d9b984ee9cb5ff9cf7a779e8bdf3c2022f9042abfa1f0f5727a082a9429535
     script: |
