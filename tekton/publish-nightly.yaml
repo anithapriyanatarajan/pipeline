@@ -139,13 +139,8 @@ spec:
       # Change to directory with vendor/
       cd ${PROJECT_ROOT}
 
+      # Use the container registry path directly - it already includes the full path
       COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
-      # If the IMAGE_REGISTRY_PATH does not already includes the package, add it
-      # Package looks like github.com/<org>/<repo>
-      # Path may look like "tekton-releases" or "tektoncd/pipeline"
-      if [[ ! "$(params.package)" == "github.com/${IMAGE_REGISTRY_PATH}" ]]; then
-        COMBINED_BASE_IMAGE_BASE=${COMBINED_BASE_IMAGE_BASE}/${IMAGE_REGISTRY_PATH}
-      fi
 
       # Combine Distroless with a Windows base image, used for the entrypoint image.
       # Distroless is pinned to the last version based on Alpine 3.18. Newer versions are based on Alpine 3.19_alpha20230901.
