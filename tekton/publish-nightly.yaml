@@ -249,12 +249,13 @@ spec:
   - name: koparse
     image: ghcr.io/tektoncd/plumbing/koparse@sha256:1898ef549aaff602d06c049136aaf1c1eacc573846c42bbf42d8dc9258235204
     script: |
+      #!/bin/sh
       set -ex
 
       # Find "--preserve-import-paths" in a list of args
-      function find_preserve_import_path() {
+      find_preserve_import_path() {
         for arg in $@; do
-          if [[ "$arg" == "--preserve-import-paths" ]]; then
+          if [ "$arg" = "--preserve-import-paths" ]; then
             return 0
           fi
         done
@@ -262,10 +263,11 @@ spec:
       }
 
       # If "--preserve-import-paths" is used, include "package" in the expected path
-      find_preserve_import_path \
-        $(echo $KO_EXTRA_ARGS) && \
-        PRESERVE_IMPORT_PATH="--preserve-path" || \
+      if find_preserve_import_path $(echo $KO_EXTRA_ARGS); then
+        PRESERVE_IMPORT_PATH="--preserve-path"
+      else
         PRESERVE_IMPORT_PATH="--no-preserve-path"
+      fi
 
       # Check if we're using --preserve-import-paths to determine the image path format
       if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
