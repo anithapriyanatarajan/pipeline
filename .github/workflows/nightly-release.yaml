@@ -35,7 +35,7 @@ on:
         required: false
         default: 'gs://tekton-releases-nightly/pipeline'
         type: string
-  push:
+  push: #retest
     branches:
       - test-rel
     paths:
