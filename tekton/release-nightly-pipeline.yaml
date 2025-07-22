@@ -305,18 +305,26 @@ spec:
               fi
 
               # Validate bucket access before cleanup
-              if ! gsutil ls "gs://${BUCKET_PATH}/nightly/" >/dev/null 2>&1; then
-                echo "ERROR: Cannot access bucket path gs://${BUCKET_PATH}/nightly/ or path doesn't exist"
-                exit 1
+              if ! gsutil ls "gs://${BUCKET_PATH}/previous/" >/dev/null 2>&1; then
+                echo "WARNING: Cannot access bucket path gs://${BUCKET_PATH}/previous/ or path doesn't exist"
+                echo "This may be the first run - creating directory structure"
+                # Try to create a placeholder to verify write access
+                echo "placeholder" | gsutil cp - "gs://${BUCKET_PATH}/previous/.placeholder" || {
+                  echo "ERROR: Cannot write to bucket gs://${BUCKET_PATH}/"
+                  exit 1
+                }
+                gsutil rm "gs://${BUCKET_PATH}/previous/.placeholder" || true
+                echo "No previous releases to clean up"
+                exit 0
               fi
 
-              # Get list of nightly directories with safe parsing
+              # Get list of previous release directories with safe parsing
               echo "Scanning for directories older than ${CUTOFF_DATE}..."
               TEMP_FILE=$(mktemp)
               trap 'rm -f "${TEMP_FILE}"' EXIT
 
               # List directories and filter safely
-              gsutil ls "gs://${BUCKET_PATH}/nightly/" | while IFS= read -r dir; do
+              gsutil ls "gs://${BUCKET_PATH}/previous/" | while IFS= read -r dir; do
                 # Extract directory name safely
                 DIR_NAME=$(basename "${dir}")
                 # Validate format: v20250710-abc1234

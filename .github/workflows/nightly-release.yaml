@@ -497,7 +497,7 @@ jobs:
             REGISTRY_PATH="${{ github.repository_owner }}/pipeline"
             REGISTRY_USER="${{ github.actor }}"
             # RUN_TESTS already set above based on event type
-            RETENTION="7"
+            RETENTION="1"
             KO_EXTRA_ARGS=""  # Don't use preserve-import-paths for cleaner image names
           fi
           validate_param "package" "${PACKAGE}" "^github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$"
