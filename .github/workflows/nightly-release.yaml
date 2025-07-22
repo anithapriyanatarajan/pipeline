@@ -231,8 +231,8 @@ jobs:
       - name: Set up Kind cluster
         uses: helm/kind-action@v1.8.0
         with:
+          node_image: kindest/node:${{ env.KUBERNETES_VERSION }}
           cluster_name: tekton-nightly
-          version: ${{ env.KUBERNETES_VERSION }}
 
       - name: Set up Tekton
         uses: tektoncd/actions/setup-tektoncd@main
