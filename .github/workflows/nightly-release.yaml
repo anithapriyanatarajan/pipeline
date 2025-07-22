@@ -238,8 +238,6 @@ jobs:
         uses: tektoncd/actions/setup-tektoncd@main
         with:
           pipeline_version: latest
-          feature_flags: '{}'
-          cli_version: latest
           setup_registry: "true"
           patch_etc_hosts: "true"
 
