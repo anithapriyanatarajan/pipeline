@@ -612,15 +612,6 @@ jobs:
           if [ -n "${PIPELINE_RUN:-}" ]; then
             tkn pipelinerun describe ${PIPELINE_RUN} || true
             tkn pipelinerun logs ${PIPELINE_RUN} --follow=false || true
-            if [[ "${{ github.repository }}" != "tektoncd/pipeline" ]]; then
-              echo ""
-              echo "FORK TESTING RESULTS:"
-              echo "   Pipeline structure validated"
-              echo "   Real secrets used for testing"
-              echo "   Artifacts published to test bucket: ${BUCKET}"
-              echo "   Container images published to: ghcr.io/${{ github.repository_owner }}/pipeline"
-              echo "   Check logs above for complete pipeline validation"
-            fi
           else
             echo "Pipeline run name not captured - check pipeline start step"
           fi
