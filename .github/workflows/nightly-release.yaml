@@ -50,7 +50,7 @@ env:
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   DRY_RUN: ${{ inputs.dry_run || false }}
   FORCE_RELEASE: ${{ inputs.force_release || false }}
-  TEST_BUCKET: ${{ inputs.test_bucket || '' }}
+  TEST_BUCKET: ${{ inputs.test_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
   PRODUCTION_BUCKET: ${{ inputs.production_bucket || 'gs://tekton-releases-nightly/pipeline' }}
 
 jobs:
