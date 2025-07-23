@@ -177,7 +177,6 @@ jobs:
             --pipeline-timeout 2h \
             --output name) || {
             echo "Failed to start Tekton pipeline!"
-            exit 1
           }
 
           tkn pipeline start pipeline-release-unified \
