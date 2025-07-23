@@ -146,9 +146,9 @@ jobs:
 
       - name: Start Tekton Build Pipeline
         run: |
-          PACKAGE="github.com/tektoncd/${{ env.COMPONENT }}"
-          GIT_ORG=$(echo "${PACKAGE}" | cut -d'/' -f2)
-          GIT_REPO=$(echo "${PACKAGE}" | cut -d'/' -f3)
+          PACKAGE="${{ github.repository }}"
+          GIT_ORG="${{ github.repository_owner }}"
+          GIT_REPO="${{ github.event.repository.name }}"
 
           tkn pipeline start pipeline-release-nightly \
             --param package="${PACKAGE}" \
