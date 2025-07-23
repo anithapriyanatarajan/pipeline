@@ -37,12 +37,14 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  REPOSITORY: ${{ github.repository }}
   COMPONENT: pipeline
+  PACKAGE: github.com/${{ github.repository }}
+  GIT_ORG: ${{ github.repository_owner }}
+  GIT_REPO: ${{ github.event.repository.name }}
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   DRY_RUN: ${{ inputs.dry_run || false }}
   BUCKET: ${{ inputs.nightly_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
-  IMAGE_REGISTRY_PATH: ${{ github.repository_owner }}
+  IMAGE_REGISTRY_PATH: tekton-releases-nightly
   IMAGE_REGISTRY_USER: ${{ github.actor }}
 
 jobs:
@@ -127,7 +129,7 @@ jobs:
           echo "${GCS_SERVICE_ACCOUNT_KEY}" > /tmp/gcs-key.json
           kubectl create secret generic release-secret \
             --from-file=release.json=/tmp/gcs-key.json
-          rm -f /tmp/gcs-key.json
+          rm -f /tmp/gcs-key.jsonGive
 
           kubectl create secret docker-registry ghcr-creds \
             --docker-server=ghcr.io \
@@ -146,15 +148,11 @@ jobs:
 
       - name: Start Tekton Build Pipeline
         run: |
-          PACKAGE="${{ github.repository }}"
-          GIT_ORG="${{ github.repository_owner }}"
-          GIT_REPO="${{ github.event.repository.name }}"
-
           tkn pipeline start pipeline-release-nightly \
-            --param package="${PACKAGE}" \
+            --param package="${{ env.PACKAGE }}" \
             --param gitRevision="${{ steps.version.outputs.latest_sha }}" \
-            --param gitOrg="${GIT_ORG}" \
-            --param gitRepo="${GIT_REPO}" \
+            --param gitOrg="${{ env.GIT_ORG }}" \
+            --param gitRepo="${{ env.GIT_REPO }}" \
             --param versionTag="${{ steps.version.outputs.version_tag }}" \
             --param releaseBucket="${{ env.BUCKET }}" \
             --param imageRegistry=${{ env.REGISTRY }} \
