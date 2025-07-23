@@ -2,9 +2,12 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: pipeline-release-nightly
+  name: pipeline-release-unified
 spec:
   params:
+    - name: releaseMode
+      description: "Release mode: 'stable' for production releases, 'nightly' for nightly builds"
+      default: "stable"
     - name: package
       description: package to release
       default: github.com/tektoncd/pipeline
@@ -21,18 +24,21 @@ spec:
       default: ghcr.io
     - name: imageRegistryPath
       description: The path (project) in the image registry
-      default: tekton-releases-nightly
+      default: ""  # Will be set based on releaseMode
+    - name: imageRegistryRegions
+      description: The target image registry regions
+      default: ""  # Empty for GHCR, "us eu asia" for GCR
     - name: imageRegistryUser
       description: The user for the image registry credentials
-      default: _json_key
-    - name: imageRegistryRegions
-      description: The target image registry regions (not used for GHCR, kept for compatibility)
-      default: ""
+      default: "_json_key"
     - name: versionTag
-      description: nightly tag (e.g. vYYYYMMDD-abc1234)
+      description: Version tag (X.Y.Z for stable, vYYYYMMDD-abc1234 for nightly)
     - name: releaseBucket
       description: bucket where the release is stored. The bucket must be project specific.
-      default: gs://tekton-releases-nightly/pipeline
+      default: ""  # Will be set based on releaseMode
+    - name: releaseAsLatest
+      description: Whether to tag and publish this release as latest
+      default: ""  # Will be set based on releaseMode
     - name: buildPlatforms
       description: Platforms to build images for (e.g. linux/amd64,linux/arm64)
       default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
@@ -50,7 +56,7 @@ spec:
       description: If set to something other than "true", skip the build and test tasks
       default: "true"
     - name: retentionDays
-      description: Number of days to retain nightly releases (older releases will be deleted)
+      description: Number of days to retain nightly releases (only used for nightly mode)
       default: "30"
   workspaces:
     - name: workarea
@@ -66,9 +72,66 @@ spec:
       value: $(tasks.report-bucket.results.release)
     - name: release-file-no-tag
       value: $(tasks.report-bucket.results.release-no-tag)
+    - name: release-mode
+      value: $(params.releaseMode)
 
   tasks:
+    - name: set-defaults
+      taskSpec:
+        params:
+          - name: releaseMode
+          - name: imageRegistryPath
+          - name: releaseBucket
+          - name: releaseAsLatest
+        results:
+          - name: imageRegistryPath
+          - name: releaseBucket
+          - name: releaseAsLatest
+          - name: imageRegistryRegions
+        steps:
+          - name: compute-defaults
+            image: docker.io/library/alpine:3.20.3
+            script: |
+              #!/bin/sh
+              
+              if [ "$(params.releaseMode)" = "nightly" ]; then
+                # Nightly defaults
+                REGISTRY_PATH=$(params.imageRegistryPath)
+                BUCKET=$(params.releaseBucket)
+                LATEST=$(params.releaseAsLatest)
+                
+                [ -z "${REGISTRY_PATH}" ] && REGISTRY_PATH="tekton-releases-nightly"
+                [ -z "${BUCKET}" ] && BUCKET="gs://tekton-releases-nightly/pipeline"
+                [ -z "${LATEST}" ] && LATEST="false"
+                REGIONS=""
+              else
+                # Stable defaults (default mode)
+                REGISTRY_PATH=$(params.imageRegistryPath)
+                BUCKET=$(params.releaseBucket)
+                LATEST=$(params.releaseAsLatest)
+                
+                [ -z "${REGISTRY_PATH}" ] && REGISTRY_PATH="tekton-releases"
+                [ -z "${BUCKET}" ] && BUCKET="gs://tekton-releases/pipeline"
+                [ -z "${LATEST}" ] && LATEST="true"
+                REGIONS="us eu asia"
+              fi
+              
+              echo -n "${REGISTRY_PATH}" > $(results.imageRegistryPath.path)
+              echo -n "${BUCKET}" > $(results.releaseBucket.path)
+              echo -n "${LATEST}" > $(results.releaseAsLatest.path)
+              echo -n "${REGIONS}" > $(results.imageRegistryRegions.path)
+      params:
+        - name: releaseMode
+          value: $(params.releaseMode)
+        - name: imageRegistryPath
+          value: $(params.imageRegistryPath)
+        - name: releaseBucket
+          value: $(params.releaseBucket)
+        - name: releaseAsLatest
+          value: $(params.releaseAsLatest)
+
     - name: git-clone
+      runAfter: [set-defaults]
       taskRef:
         resolver: bundles
         params:
@@ -107,7 +170,7 @@ spec:
         - name: versionTag
           value: $(params.versionTag)
         - name: releaseBucket
-          value: $(params.releaseBucket)
+          value: $(tasks.set-defaults.results.releaseBucket)
       workspaces:
         - name: source-to-release
           workspace: workarea
@@ -168,8 +231,10 @@ spec:
     - name: publish-images
       runAfter: [unit-tests, build]
       taskRef:
-        name: publish-release-nightly
+        name: publish-release-unified
       params:
+        - name: releaseMode
+          value: $(params.releaseMode)
         - name: package
           value: $(params.package)
         - name: versionTag
@@ -177,13 +242,13 @@ spec:
         - name: imageRegistry
           value: $(params.imageRegistry)
         - name: imageRegistryPath
-          value: $(params.imageRegistryPath)
+          value: $(tasks.set-defaults.results.imageRegistryPath)
         - name: imageRegistryUser
           value: $(params.imageRegistryUser)
         - name: imageRegistryRegions
-          value: $(params.imageRegistryRegions)
+          value: $(tasks.set-defaults.results.imageRegistryRegions)
         - name: releaseAsLatest
-          value: "false"
+          value: $(tasks.set-defaults.results.releaseAsLatest)
         - name: serviceAccountPath
           value: $(params.serviceAccountImagesPath)
         - name: platforms
@@ -220,14 +285,18 @@ spec:
           subPath: bucket
       params:
         - name: location
-          value: $(params.releaseBucket)/previous/$(params.versionTag)
+          value: $(tasks.set-defaults.results.releaseBucket)/previous/$(params.versionTag)
         - name: path
           value: $(params.versionTag)
         - name: serviceAccountPath
           value: $(params.serviceAccountPath)
 
-    - name: publish-latest-nightly
+    - name: publish-latest
       runAfter: [publish-to-bucket]
+      when:
+        - input: "$(tasks.set-defaults.results.releaseAsLatest)"
+          operator: in
+          values: ["true"]
       taskRef:
         resolver: bundles
         params:
@@ -245,133 +314,19 @@ spec:
           subPath: bucket
       params:
         - name: location
-          value: $(params.releaseBucket)/latest
+          value: $(tasks.set-defaults.results.releaseBucket)/latest
         - name: path
           value: $(params.versionTag)
         - name: serviceAccountPath
           value: $(params.serviceAccountPath)
-
-    - name: cleanup-old-nightlies
-      runAfter: [publish-latest-nightly]
-      taskSpec:
-        params:
-          - name: releaseBucket
-          - name: retentionDays
-          - name: serviceAccountPath
-        workspaces:
-          - name: credentials
-        steps:
-          - name: cleanup
-            image: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
-            env:
-              - name: RELEASE_BUCKET
-                value: $(params.releaseBucket)
-              - name: RETENTION_DAYS
-                value: $(params.retentionDays)
-              - name: SERVICE_ACCOUNT_PATH
-                value: $(params.serviceAccountPath)
-            script: |
-              #!/bin/bash
-              set -euo pipefail  # Enhanced error handling and unset variable protection
-
-              # Input validation
-              if [[ ! "${RETENTION_DAYS}" =~ ^[0-9]+$ ]] || [[ "${RETENTION_DAYS}" -lt 1 ]] || [[ "${RETENTION_DAYS}" -gt 365 ]]; then
-                echo "ERROR: RETENTION_DAYS must be a number between 1 and 365, got: ${RETENTION_DAYS}"
-                exit 1
-              fi
-
-              if [[ ! "${RELEASE_BUCKET}" =~ ^gs://[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9]/?.*$ ]]; then
-                echo "ERROR: Invalid RELEASE_BUCKET format, must start with gs://, got: ${RELEASE_BUCKET}"
-                exit 1
-              fi
-
-              # Authenticate with service account (with validation)
-              if [[ ! -f "$(workspaces.credentials.path)/${SERVICE_ACCOUNT_PATH}" ]]; then
-                echo "ERROR: Service account file not found at: $(workspaces.credentials.path)/${SERVICE_ACCOUNT_PATH}"
-                exit 1
-              fi
-
-              gcloud auth activate-service-account --key-file="$(workspaces.credentials.path)/${SERVICE_ACCOUNT_PATH}"
-
-              # Calculate the cutoff date (RETENTION_DAYS ago)
-              CUTOFF_DATE=$(date -d "${RETENTION_DAYS} days ago" +%Y%m%d)
-              echo "Cleaning up nightly releases older than ${RETENTION_DAYS} days (before ${CUTOFF_DATE})"
-
-              # Sanitize bucket path (remove gs:// prefix safely)
-              BUCKET_PATH="${RELEASE_BUCKET#gs://}"
-              if [[ "${BUCKET_PATH}" == "${RELEASE_BUCKET}" ]]; then
-                echo "ERROR: RELEASE_BUCKET must start with gs://"
-                exit 1
-              fi
-
-              # Validate bucket access before cleanup
-              if ! gsutil ls "gs://${BUCKET_PATH}/previous/" >/dev/null 2>&1; then
-                echo "WARNING: Cannot access bucket path gs://${BUCKET_PATH}/previous/ or path doesn't exist"
-                echo "This may be the first run - creating directory structure"
-                # Try to create a placeholder to verify write access
-                echo "placeholder" | gsutil cp - "gs://${BUCKET_PATH}/previous/.placeholder" || {
-                  echo "ERROR: Cannot write to bucket gs://${BUCKET_PATH}/"
-                  exit 1
-                }
-                gsutil rm "gs://${BUCKET_PATH}/previous/.placeholder" || true
-                echo "No previous releases to clean up"
-                exit 0
-              fi
-
-              # Get list of previous release directories with safe parsing
-              echo "Scanning for directories older than ${CUTOFF_DATE}..."
-              TEMP_FILE=$(mktemp)
-              trap 'rm -f "${TEMP_FILE}"' EXIT
-
-              # List directories and filter safely
-              gsutil ls "gs://${BUCKET_PATH}/previous/" | while IFS= read -r dir; do
-                # Extract directory name safely
-                DIR_NAME=$(basename "${dir}")
-                # Validate format: v20250710-abc1234
-                if [[ "${DIR_NAME}" =~ ^v([0-9]{8})-[a-f0-9]+/?$ ]]; then
-                  DIR_DATE="${BASH_REMATCH[1]}"
-                  # Compare dates (string comparison works for YYYYMMDD format)
-                  if [[ "${DIR_DATE}" < "${CUTOFF_DATE}" ]]; then
-                    echo "${dir}" >> "${TEMP_FILE}"
-                  fi
-                fi
-              done
-
-              # Delete old directories if any found
-              if [[ -s "${TEMP_FILE}" ]]; then
-                echo "Found directories to delete:"
-                cat "${TEMP_FILE}"
-                echo "Proceeding with deletion..."
-
-                # Delete directories one by one for better error handling
-                while IFS= read -r dir; do
-                  echo "Deleting: ${dir}"
-                  if gsutil -m rm -r "${dir}"; then
-                    echo "Successfully deleted: ${dir}"
-                  else
-                    echo "WARNING: Failed to delete: ${dir}"
-                  fi
-                done < "${TEMP_FILE}"
-                echo "Cleanup completed"
-              else
-                echo "No old nightly releases found to delete"
-              fi
-      workspaces:
-        - name: credentials
-          workspace: release-secret
-      params:
-        - name: releaseBucket
-          value: $(params.releaseBucket)
-        - name: retentionDays
-          value: $(params.retentionDays)
-        - name: serviceAccountPath
-          value: $(params.serviceAccountPath)
+        - name: deleteExtraFiles
+          value: "true"
 
     - name: report-bucket
-      runAfter: [cleanup-old-nightlies]
+      runAfter: [publish-to-bucket]
       params:
         - name: releaseBucket
-          value: $(params.releaseBucket)
+          value: $(tasks.set-defaults.results.releaseBucket)
         - name: versionTag
           value: $(params.versionTag)
       taskSpec:
@@ -385,7 +340,7 @@ spec:
             description: URL of release.notag.yaml
         steps:
           - name: create-results
-            image: docker.io/library/alpine
+            image: docker.io/library/alpine:3.20.3
             env:
               - name: RELEASE_BUCKET
                 value: $(params.releaseBucket)

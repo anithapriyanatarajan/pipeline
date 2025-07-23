@@ -39,7 +39,7 @@ env:
   REGISTRY: ghcr.io
   COMPONENT: pipeline
   PACKAGE: github.com/${{ github.repository }}
-  GIT_ORG: ${{ github.repository_owner }}
+  GIT_ORG: anithapriyanatarajan
   GIT_REPO: ${{ github.event.repository.name }}
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   DRY_RUN: ${{ inputs.dry_run || false }}
@@ -118,8 +118,8 @@ jobs:
 
       - name: Apply Build Pipeline Definition
         run: |
-          kubectl apply -f tekton/publish-nightly.yaml
-          kubectl apply -f tekton/release-nightly-${{ env.COMPONENT }}.yaml
+          kubectl apply -f tekton/publish-unified.yaml
+          kubectl apply -f tekton/release-unified.yaml
 
       - name: Create secrets and PVC template
         env:
@@ -148,7 +148,12 @@ jobs:
 
       - name: Start Tekton Build Pipeline
         run: |
-          tkn pipeline start pipeline-release-nightly \
+          set -euo pipefail  # Exit on any error, undefined variables, or pipe failures
+          
+          echo "Starting Tekton pipeline..."
+          
+          PIPELINE_RUN=$(tkn pipeline start pipeline-release-unified \
+            --param releaseMode="nightly" \
             --param package="${{ env.PACKAGE }}" \
             --param gitRevision="${{ steps.version.outputs.latest_sha }}" \
             --param gitOrg="${{ env.GIT_ORG }}" \
@@ -170,4 +175,19 @@ jobs:
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=ghcr-creds \
             --pipeline-timeout 2h \
-            --showlog
+            --output name) || {
+            echo "Failed to start Tekton pipeline!"
+            exit 1
+          }
+          
+          echo "Pipeline started: ${PIPELINE_RUN}"
+          tkn pipelinerun logs "${PIPELINE_RUN}" -f
+          
+          # Check if pipeline succeeded
+          tkn pipelinerun describe "${PIPELINE_RUN}" --output jsonpath='{.status.conditions[?(@.type=="Succeeded")].status}' | grep -q "True" || {
+            echo "Pipeline failed!"
+            tkn pipelinerun describe "${PIPELINE_RUN}"
+            exit 1
+          }
+          
+          echo "✅ Pipeline Run completed successfully!"

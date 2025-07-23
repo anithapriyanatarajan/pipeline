@@ -1,11 +1,14 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: publish-release-nightly
+  name: publish-release-unified
   annotations:
     chains.tekton.dev/transparency-upload: "true"
 spec:
   params:
+    - name: releaseMode
+      description: "Release mode: 'stable' for production releases, 'nightly' for nightly builds"
+      default: "stable"
     - name: package
       description: package to release (e.g. github.com/<org>/<project>)
       default: github.com/tektoncd/pipeline
@@ -14,9 +17,9 @@ spec:
       default: "controller webhook entrypoint nop workingdirinit resolvers sidecarlogresults events"
     - name: koExtraArgs
       description: Extra args to be passed to ko
-      default: ""
+      default: "--preserve-import-paths"
     - name: versionTag
-      description: Nightly version tag (e.g. vYYYYMMDD-HHMMSS)
+      description: Version tag (X.Y.Z for stable, vYYYYMMDD-abc1234 for nightly)
     - name: imageRegistry
       description: The target image registry
       default: ghcr.io
@@ -27,9 +30,9 @@ spec:
       default: ""
     - name: imageRegistryUser
       description: Username to be used to login to the container registry
-      default: ""
+      default: "_json_key"
     - name: releaseAsLatest
-      description: Whether to tag and publish this release as Pipelines latest
+      description: Whether to tag and publish this release as latest
       default: "false"
     - name: platforms
       description: Platforms to publish for the images (e.g. linux/amd64,linux/arm64)
@@ -66,6 +69,8 @@ spec:
         value: "$(workspaces.output.path)/$(params.versionTag)"
       - name: KO_EXTRA_ARGS
         value: "$(params.koExtraArgs)"
+      - name: RELEASE_MODE
+        value: "$(params.releaseMode)"
   results:
   # IMAGES result is picked up by Tekton Chains to sign the release.
   # See https://github.com/tektoncd/plumbing/blob/main/docs/signing.md for more info.
@@ -115,8 +120,40 @@ spec:
       # Change to directory with vendor/
       cd ${PROJECT_ROOT}
 
-      # Use the container registry path directly - it already includes the full path
-      COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
+      if [ "${RELEASE_MODE}" = "stable" ]; then
+        # Stable mode: Traditional registry path handling
+        COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
+        # If the IMAGE_REGISTRY_PATH does not already includes the package, add it
+        # Package looks like github.com/<org>/<repo>
+        # Path may look like "tekton-releases" or "tektoncd/pipeline"
+        if [[ ! "$(params.package)" == "github.com/${IMAGE_REGISTRY_PATH}" ]]; then
+          COMBINED_BASE_IMAGE_BASE=${COMBINED_BASE_IMAGE_BASE}/${IMAGE_REGISTRY_PATH}
+        fi
+
+        # Use full package paths for stable releases
+        ENTRYPOINT_PATH="$(params.package)/cmd/entrypoint"
+        NOP_PATH="$(params.package)/cmd/nop"
+        WORKINGDIRINIT_PATH="$(params.package)/cmd/workingdirinit"
+        RESOLVERS_PATH="$(params.package)/cmd/resolvers"
+      else
+        # Nightly mode: Use the container registry path directly
+        COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
+
+        # Check if we're using --preserve-import-paths to determine the image path format
+        if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
+          # Use full package paths when preserve-import-paths is enabled
+          ENTRYPOINT_PATH="$(params.package)/cmd/entrypoint"
+          NOP_PATH="$(params.package)/cmd/nop"
+          WORKINGDIRINIT_PATH="$(params.package)/cmd/workingdirinit"
+          RESOLVERS_PATH="$(params.package)/cmd/resolvers"
+        else
+          # Use simplified paths when preserve-import-paths is not used
+          ENTRYPOINT_PATH="./cmd/entrypoint"
+          NOP_PATH="./cmd/nop"
+          WORKINGDIRINIT_PATH="./cmd/workingdirinit"
+          RESOLVERS_PATH="./cmd/resolvers"
+        fi
+      fi
 
       # Combine Distroless with a Windows base image, used for the entrypoint image.
       # Distroless is pinned to the last version based on Alpine 3.18. Newer versions are based on Alpine 3.19_alpha20230901.
@@ -127,21 +164,6 @@ spec:
         ${COMBINED_BASE_IMAGE_BASE}/combined-base-image:latest)
 
       # NOTE: Make sure this list of images to use the combined base image is in sync with what's in test/presubmit-tests.sh's 'ko_resolve' function.
-
-      # Check if we're using --preserve-import-paths to determine the image path format
-      if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
-        # Use full package paths when preserve-import-paths is enabled
-        ENTRYPOINT_PATH="$(params.package)/cmd/entrypoint"
-        NOP_PATH="$(params.package)/cmd/nop"
-        WORKINGDIRINIT_PATH="$(params.package)/cmd/workingdirinit"
-        RESOLVERS_PATH="$(params.package)/cmd/resolvers"
-      else
-        # Use simplified paths when preserve-import-paths is not used
-        ENTRYPOINT_PATH="./cmd/entrypoint"
-        NOP_PATH="./cmd/nop"
-        WORKINGDIRINIT_PATH="./cmd/workingdirinit"
-        RESOLVERS_PATH="./cmd/resolvers"
-      fi
 
       cat <<EOF > /workspace/.ko.yaml
       # This matches the value configured in .ko.yaml
