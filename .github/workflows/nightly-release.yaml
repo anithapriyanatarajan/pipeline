@@ -41,7 +41,9 @@ env:
   COMPONENT: pipeline
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   DRY_RUN: ${{ inputs.dry_run || false }}
-  NIGHTLY_BUCKET: ${{ inputs.nightly_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
+  BUCKET: ${{ inputs.nightly_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
+  IMAGE_REGISTRY_PATH: ${{ github.repository_owner }}
+  IMAGE_REGISTRY_USER: ${{ github.actor }}
 
 jobs:
   build:
@@ -145,7 +147,6 @@ jobs:
       - name: Start Tekton Build Pipeline
         run: |
           PACKAGE="github.com/tektoncd/${{ env.COMPONENT }}"
-          BUCKET="${{ env.NIGHTLY_BUCKET }}"
           GIT_ORG=$(echo "${PACKAGE}" | cut -d'/' -f2)
           GIT_REPO=$(echo "${PACKAGE}" | cut -d'/' -f3)
 
@@ -155,10 +156,10 @@ jobs:
             --param gitOrg="${GIT_ORG}" \
             --param gitRepo="${GIT_REPO}" \
             --param versionTag="${{ steps.version.outputs.version_tag }}" \
-            --param releaseBucket="${BUCKET}" \
-            --param imageRegistry=ghcr.io \
-            --param imageRegistryPath="tekton-releases-nightly" \
-            --param imageRegistryUser="tekton-robot" \
+            --param releaseBucket="${{ env.BUCKET }}" \
+            --param imageRegistry=${{ env.REGISTRY }} \
+            --param imageRegistryPath="${{ env.IMAGE_REGISTRY_PATH }}" \
+            --param imageRegistryUser="${{ env.IMAGE_REGISTRY_USER }}" \
             --param imageRegistryRegions="" \
             --param buildPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le" \
             --param publishPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64" \
