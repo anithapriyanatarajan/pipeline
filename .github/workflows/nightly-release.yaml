@@ -1,4 +1,4 @@
-name: Tekton Nightly Release
+name: Tekton Nightly Build
 
 on:
   schedule:
@@ -15,27 +15,18 @@ on:
           - v1.33.0
           - v1.32.0
           - v1.31.0
-      force_release:
-        description: 'Force release even if no changes detected'
-        required: false
-        default: false
-        type: boolean
       dry_run:
         description: 'Perform dry run (no actual publishing)'
         required: false
         default: false
         type: boolean
-      test_bucket:
-        description: 'Test bucket for fork releases (defaults to auto-generated)'
-        required: false
-        default: ''
-        type: string
-      production_bucket:
-        description: 'Production bucket for main releases'
+      nightly_bucket:
+        description: 'Nightly bucket for builds'
         required: false
         default: 'gs://tekton-releases-nightly/pipeline'
         type: string
-  push: #retest
+  # uncomment the following to enable manual testing of the workflow
+  push:
     branches:
       - test-rel
     paths:
@@ -47,186 +38,34 @@ on:
 env:
   REGISTRY: ghcr.io
   REPOSITORY: ${{ github.repository }}
+  COMPONENT: pipeline
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   DRY_RUN: ${{ inputs.dry_run || false }}
-  FORCE_RELEASE: ${{ inputs.force_release || false }}
-  TEST_BUCKET: ${{ inputs.test_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
-  PRODUCTION_BUCKET: ${{ inputs.production_bucket || 'gs://tekton-releases-nightly/pipeline' }}
+  NIGHTLY_BUCKET: ${{ inputs.nightly_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
 
 jobs:
-  pre-checks:
-    name: Pre-release Checks
+  build:
+    name: Nightly Build (K8s ${{ inputs.kubernetes_version || 'v1.33.0' }})
     runs-on: ubuntu-latest
-    outputs:
-      should_release: ${{ steps.changes.outputs.should_release }}
-      version_tag: ${{ steps.version.outputs.version_tag }}
-      latest_sha: ${{ steps.version.outputs.latest_sha }}
-      is_fork: ${{ steps.repo_check.outputs.is_fork }}
-      ko_extra_args: ${{ steps.repo_check.outputs.ko_extra_args }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 50
-
-      - name: Repository analysis
-        id: repo_check
-        run: |
-          set -euo pipefail
-
-          echo "Analyzing repository configuration..."
-
-          if [[ "${{ github.repository }}" == "tektoncd/pipeline" ]]; then
-            echo "PRODUCTION MODE: tektoncd/pipeline (upstream)"
-            echo "is_fork=false" >> "$GITHUB_OUTPUT"
-            echo "ko_extra_args=--preserve-import-paths" >> "$GITHUB_OUTPUT"
-          else
-            echo "FORK MODE: ${{ github.repository }}"
-            echo "is_fork=true" >> "$GITHUB_OUTPUT"
-            echo "ko_extra_args=" >> "$GITHUB_OUTPUT"
-          fi
-
-          echo "Repository: ${{ github.repository }}"
-          echo "Owner: ${{ github.repository_owner }}"
-
-      - name: Get latest commit and version
-        id: version
-        run: |
-          set -euo pipefail
-
-          if [[ "${{ github.repository }}" == "tektoncd/pipeline" ]]; then
-            # For upstream, get the latest commit from main
-            REPO="https://github.com/tektoncd/pipeline.git"
-            echo "Fetching latest commit from upstream main branch..."
-          else
-            # For forks, use the current repository
-            REPO="https://github.com/${{ github.repository }}.git"
-            echo "Fetching latest commit from fork main branch..."
-          fi
-
-          latest_sha=$(git ls-remote ${REPO} refs/heads/main | cut -f1)
-          echo "latest_sha=${latest_sha}" >> "$GITHUB_OUTPUT"
-
-          # Generate version tag
-          date_tag=$(date +v%Y%m%d-${latest_sha:0:7})
-          echo "version_tag=${date_tag}" >> "$GITHUB_OUTPUT"
-
-          echo "Release Information:"
-          echo "  Latest SHA: ${latest_sha}"
-          echo "  Version tag: ${date_tag}"
-          echo "  Timestamp: $(date -u)"
-
-      - name: Check for changes since last release
-        id: changes
-        run: |
-          set -euo pipefail
-
-          should_release="true"
-
-          # If force release is enabled, always release
-          if [[ "${{ env.FORCE_RELEASE }}" == "true" ]]; then
-            echo "Force release enabled - will create release"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Check if this is a manual workflow dispatch
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "Manual workflow dispatch - will create release"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # For scheduled runs, check for recent changes
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            echo "Scheduled run - checking for recent changes..."
-
-            # Check if there have been commits in the last 25 hours
-            recent_commits=$(git log --since="25 hours ago" --oneline | wc -l)
-
-            if [[ $recent_commits -gt 0 ]]; then
-              echo "Found $recent_commits recent commit(s) - will create release"
-              echo "should_release=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "No recent commits found - skipping release"
-              echo "should_release=false" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
-          echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
-
-      - name: Validate configuration
-        run: |
-          set -euo pipefail
-
-          echo "Validating configuration..."
-
-          # Check required files
-          required_files=(
-            "tekton/release-nightly-pipeline.yaml"
-            "tekton/publish-nightly.yaml"
-          )
-
-          for file in "${required_files[@]}"; do
-            if [[ ! -f "$file" ]]; then
-              echo "Required file missing: $file"
-              exit 1
-            fi
-            echo "Found: $file"
-          done
-
-          # Validate YAML syntax
-          if command -v python3 >/dev/null 2>&1; then
-            for file in "${required_files[@]}"; do
-              if python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
-                echo "Valid YAML: $file"
-              else
-                echo "Invalid YAML: $file"
-                exit 1
-              fi
-            done
-          fi
-
-          echo "Configuration validation passed"
-
-  release:
-    name: Nightly Release (K8s ${{ inputs.kubernetes_version || 'v1.33.0' }})
-    runs-on: ubuntu-latest
-    needs: pre-checks
-    if: needs.pre-checks.outputs.should_release == 'true'
 
     permissions:
       contents: read
       packages: write
       id-token: write
 
-    env:
-      VERSION_TAG: ${{ needs.pre-checks.outputs.version_tag }}
-      LATEST_SHA: ${{ needs.pre-checks.outputs.latest_sha }}
-      IS_FORK: ${{ needs.pre-checks.outputs.is_fork }}
-      KO_EXTRA_ARGS: ${{ needs.pre-checks.outputs.ko_extra_args }}
-
     steps:
-      - name: Release Information
-        run: |
-          set -euo pipefail
-
-          echo "Starting Tekton Nightly Release"
-          echo "=================================="
-          echo "Repository: ${{ github.repository }}"
-          echo "Mode: ${{ env.IS_FORK == 'true' && 'Fork Testing' || 'Production' }}"
-          echo "Kubernetes: ${{ env.KUBERNETES_VERSION }}"
-          echo "Version: ${{ env.VERSION_TAG }}"
-          echo "SHA: ${{ env.LATEST_SHA }}"
-          echo "Dry Run: ${{ env.DRY_RUN }}"
-          echo "Timestamp: $(date -u)"
-          echo "=================================="
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Generate version info
+        id: version
+        run: |
+          latest_sha=${{ github.sha }}
+          date_tag=$(date +v%Y%m%d-${latest_sha:0:7})
+          echo "version_tag=${date_tag}" >> "$GITHUB_OUTPUT"
+          echo "latest_sha=${latest_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Kind cluster
         uses: helm/kind-action@v1.8.0
@@ -241,62 +80,22 @@ jobs:
           setup_registry: "true"
           patch_etc_hosts: "true"
 
-      - name: Verify Tekton installation
-        run: |
-          set -euo pipefail
-
-          # Verify Tekton installations
-          echo "Verifying Tekton Pipelines..."
-          kubectl get pods -n tekton-pipelines
-          kubectl get pods -n tekton-pipelines-resolvers || echo "No tekton-pipelines-resolvers namespace (may be included in main namespace)"
-
-          # Wait for Tekton components to be ready
-          kubectl wait --for=condition=Ready pods --all -n tekton-pipelines --timeout=300s
-          
-          # Check if resolvers namespace exists and wait for it
-          if kubectl get namespace tekton-pipelines-resolvers >/dev/null 2>&1; then
-            kubectl wait --for=condition=Ready pods --all -n tekton-pipelines-resolvers --timeout=300s
-          fi
-
-          echo "Tekton installation verified successfully!"
-
       - name: Configure Tekton Git Resolver
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
-          set -euo pipefail
-          echo "Configuring Tekton Git resolver..."
-
-          for i in {1..10}; do
-            if kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io webhook.pipeline.tekton.dev >/dev/null 2>&1; then
-              echo "Tekton webhook configuration found"
-              break
-            fi
-            echo "Waiting for webhook configuration... (attempt $i/10)"
-            sleep 5
-          done
-
-          # Create secret for Git resolver API token in both namespaces
-          # 1. In tekton-pipelines-resolvers namespace for the Git resolver itself
           kubectl create secret generic git-resolver-secret \
             --from-literal=token="${GITHUB_TOKEN}" \
-            -n tekton-pipelines-resolvers || echo "Secret may already exist in tekton-pipelines-resolvers"
+            -n tekton-pipelines-resolvers || true
 
-          # 2. In default namespace for pipeline tasks that may need it
-          kubectl create secret generic git-resolver-secret \
-            --from-literal=token="${GITHUB_TOKEN}" \
-            -n default || echo "Secret may already exist in default"
-
-          # Enable resolvers in feature flags
           kubectl patch configmap resolvers-feature-flags -n tekton-pipelines-resolvers --patch='
           data:
             enable-git-resolver: "true"
             enable-hub-resolver: "true"
             enable-bundles-resolver: "true"
             enable-cluster-resolver: "true"
-          ' || echo "ConfigMap may not exist yet"
+          ' || true
 
-          # Update git resolver config using kubectl patch
           kubectl patch configmap git-resolver-config -n tekton-pipelines-resolvers --patch='
           data:
             default-url: "https://github.com"
@@ -306,310 +105,70 @@ jobs:
             server-url: "https://api.github.com"
             api-token-secret-name: "git-resolver-secret"
             api-token-secret-key: "token"
-          '
-
-          # Restart the resolvers to pick up the new configuration
-          kubectl rollout restart deployment/tekton-pipelines-remote-resolvers -n tekton-pipelines-resolvers || echo "Resolvers deployment may not exist"
-
-          # Wait for the restart to complete
-          kubectl rollout status deployment/tekton-pipelines-remote-resolvers -n tekton-pipelines-resolvers --timeout=120s || echo "Timeout waiting for restart"
-
-          # Give resolvers time to pick up the new config and be fully ready
-          echo "Waiting for resolvers to be fully ready..."
-          sleep 30
-
-          # Verify resolver pods are running
-          kubectl get pods -n tekton-pipelines-resolvers -l app.kubernetes.io/name=resolvers || echo "No resolver pods found"
-
-          # Check if resolver service is accessible
-          kubectl get services -n tekton-pipelines-resolvers || echo "No services in resolvers namespace"
-
-          echo "Git resolver configured"
+          ' || true
 
       - name: Install tkn CLI
         uses: tektoncd/actions/setup-tektoncd-cli@main
         with:
           version: latest
 
-      - name: Apply Nightly Pipeline Definition
+      - name: Apply Build Pipeline Definition
         run: |
-          set -euo pipefail
-
-          # Apply the nightly publish task first
-          echo "Applying nightly publish task..."
-          for i in {1..5}; do
-            if kubectl apply -f tekton/publish-nightly.yaml; then
-              echo "Nightly publish task applied successfully"
-              break
-            else
-              echo "Failed to apply nightly publish task (attempt $i/5)"
-              if [ $i -eq 5 ]; then
-                echo "Failed to apply nightly publish task after 5 attempts"
-                exit 1
-              fi
-              echo "Waiting 10 seconds before retry..."
-              sleep 10
-            fi
-          done
-          kubectl get task publish-release-nightly -o name
-
-          # Apply the nightly pipeline
-          echo "Applying nightly pipeline..."
-          for i in {1..5}; do
-            if kubectl apply -f tekton/release-nightly-pipeline.yaml; then
-              echo "Pipeline applied successfully"
-              break
-            else
-              echo "Failed to apply pipeline (attempt $i/5)"
-              if [ $i -eq 5 ]; then
-                echo "Failed to apply pipeline after 5 attempts"
-                exit 1
-              fi
-              echo "Waiting 10 seconds before retry..."
-              sleep 10
-            fi
-          done
-          kubectl get pipeline pipeline-release-nightly -o name
-          echo "Pipeline and task verification completed"
+          kubectl apply -f tekton/publish-nightly.yaml
+          kubectl apply -f tekton/release-nightly-${{ env.COMPONENT }}.yaml
 
       - name: Create secrets and PVC template
         env:
           GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
-          set -euo pipefail
-          if [[ -z "${GCS_SERVICE_ACCOUNT_KEY}" ]]; then
-            echo "ERROR: GCS_SERVICE_ACCOUNT_KEY secret is not configured"
-            exit 1
-          fi
-          if [[ -z "${GHCR_TOKEN}" ]]; then
-            echo "ERROR: GHCR_TOKEN secret is not configured"
-            exit 1
-          fi
-
-          echo "Debug: Container registry authentication"
-          echo "   Registry: ghcr.io"
-          echo "   Username: ${{ github.actor }}"
-          echo "   Token length: ${#GHCR_TOKEN}"
-          echo "   Repository: ${{ github.repository }}"
-          echo "   Target path: ghcr.io/${{ github.repository_owner }}/pipeline/"
-
-          # Check if repository is public
-          echo "Repository visibility check..."
-          if [[ "${{ github.event.repository.private }}" == "true" ]]; then
-            echo "   Repository is PRIVATE - packages will be private by default"
-          else
-            echo "   Repository is PUBLIC - packages should be pushable"
-          fi
-
-          # Test authentication with GitHub Container Registry
-          echo "Testing GHCR authentication..."
-          if echo "${GHCR_TOKEN}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin; then
-            echo "GHCR login successful"
-          else
-            echo "GHCR login failed"
-            echo "Troubleshooting steps:"
-            echo "   1. Check if GHCR_TOKEN secret has 'write:packages' scope"
-            echo "   2. Check if repository has GitHub Packages enabled"
-            echo "   3. Verify token belongs to the correct user"
-            exit 1
-          fi
-
-          # Test repository access by trying to pull a small image (if it exists)
-          echo "Testing repository access..."
-          docker pull hello-world:latest >/dev/null 2>&1 || echo "Basic docker pull works"
-
-          # Try to push a test tag to verify permissions
-          echo "Testing push permissions..."
-          if docker tag hello-world:latest ghcr.io/${{ github.repository_owner }}/pipeline/test:latest; then
-            echo "Tag creation successful"
-            if docker push ghcr.io/${{ github.repository_owner }}/pipeline/test:latest; then
-              echo "Test push successful - GHCR permissions are working"
-              # Clean up test image
-              docker rmi ghcr.io/${{ github.repository_owner }}/pipeline/test:latest || true
-            else
-              echo "Test push failed - check package permissions"
-              echo "This might be the same issue affecting the pipeline"
-            fi
-          else
-            echo "Tag creation failed"
-          fi
-
-          # Use plain echo, not base64 decoding
           echo "${GCS_SERVICE_ACCOUNT_KEY}" > /tmp/gcs-key.json
           kubectl create secret generic release-secret \
             --from-file=release.json=/tmp/gcs-key.json
           rm -f /tmp/gcs-key.json
+
           kubectl create secret docker-registry ghcr-creds \
             --docker-server=ghcr.io \
             --docker-username=${{ github.actor }} \
             --docker-password="${GHCR_TOKEN}" \
             --docker-email=${{ github.actor }}@users.noreply.github.com
 
-          # Create workspace template for pipeline storage
-          echo 'spec:' > workspace-template.yaml
-          echo '  accessModes:' >> workspace-template.yaml
-          echo '  - ReadWriteOnce' >> workspace-template.yaml
-          echo '  resources:' >> workspace-template.yaml
-          echo '    requests:' >> workspace-template.yaml
-          echo '      storage: 1Gi' >> workspace-template.yaml
+          cat > workspace-template.yaml << EOF
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+          EOF
 
-          # Verify the workspace template was created
-          echo "Workspace template created:"
-          cat workspace-template.yaml
-
-      - name: Start Nightly Tekton Pipeline
+      - name: Start Tekton Build Pipeline
         run: |
-          set -euo pipefail
-          validate_param() {
-            local param_name="$1"
-            local param_value="$2"
-            local pattern="$3"
-            if [[ ! "${param_value}" =~ ${pattern} ]]; then
-              echo "ERROR: Invalid ${param_name}: ${param_value}"
-              echo "Expected pattern: ${pattern}"
-              exit 1
-            fi
-          }
-          validate_param "gitRevision" "${{ env.LATEST_SHA }}" "^[a-f0-9]{40}$"
-          validate_param "versionTag" "${{ env.VERSION_TAG }}" "^v[0-9]{8}-[a-f0-9]{7}$"
-          # Determine if tests should run based on repository and event type
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            RUN_TESTS="true"
-          else
-            RUN_TESTS="false"
-          fi
-
-          if [[ "${{ github.repository }}" == "tektoncd/pipeline" ]]; then
-            PACKAGE="github.com/tektoncd/pipeline"
-            BUCKET="${{ env.PRODUCTION_BUCKET }}"
-            REGISTRY_PATH="tekton-releases-nightly"
-            REGISTRY_USER="tekton-robot"
-            RUN_TESTS="true"  # Always run tests for main repo
-            RETENTION="30"
-            KO_EXTRA_ARGS="--preserve-import-paths"
-          else
-            # For fork testing, use a simpler package name that doesn't include the full GitHub path
-            PACKAGE="github.com/tektoncd/pipeline"  # Keep using upstream package for compatibility
-            BUCKET="${TEST_BUCKET:-gs://${{ github.repository_owner }}-tekton-nightly-test/pipeline}"
-            REGISTRY_PATH="${{ github.repository_owner }}/pipeline"
-            REGISTRY_USER="${{ github.actor }}"
-            # RUN_TESTS already set above based on event type
-            RETENTION="1"
-            KO_EXTRA_ARGS=""  # Don't use preserve-import-paths for cleaner image names
-          fi
-          validate_param "package" "${PACKAGE}" "^github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$"
-          validate_param "bucket" "${BUCKET}" "^gs://[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9](/.*)?$"
-          validate_param "registryPath" "${REGISTRY_PATH}" "^[a-zA-Z0-9][a-zA-Z0-9_.-]*[a-zA-Z0-9](/[a-zA-Z0-9_.-]+)*$"
-          validate_param "retention" "${RETENTION}" "^[1-9][0-9]*$"
-
-          # Extract org and repo from package (github.com/org/repo)
+          PACKAGE="github.com/tektoncd/${{ env.COMPONENT }}"
+          BUCKET="${{ env.NIGHTLY_BUCKET }}"
           GIT_ORG=$(echo "${PACKAGE}" | cut -d'/' -f2)
           GIT_REPO=$(echo "${PACKAGE}" | cut -d'/' -f3)
-          validate_param "gitOrg" "${GIT_ORG}" "^[a-zA-Z0-9_.-]+$"
-          validate_param "gitRepo" "${GIT_REPO}" "^[a-zA-Z0-9_.-]+$"
 
-          echo "Git parameters:"
-          echo "   Package: ${PACKAGE}"
-          echo "   Git Org: ${GIT_ORG}"
-          echo "   Git Repo: ${GIT_REPO}"
-          echo "   Git Revision: ${{ env.LATEST_SHA }}"
-          echo "Starting Tekton pipeline..."
-          tkn pipeline list
-
-          # Capture the pipeline start output
-          PIPELINE_START_OUTPUT=$(tkn pipeline start pipeline-release-nightly \
+          tkn pipeline start pipeline-release-nightly \
             --param package="${PACKAGE}" \
-            --param gitRevision="${{ env.LATEST_SHA }}" \
+            --param gitRevision="${{ steps.version.outputs.latest_sha }}" \
             --param gitOrg="${GIT_ORG}" \
             --param gitRepo="${GIT_REPO}" \
-            --param versionTag="${{ env.VERSION_TAG }}" \
+            --param versionTag="${{ steps.version.outputs.version_tag }}" \
             --param releaseBucket="${BUCKET}" \
             --param imageRegistry=ghcr.io \
-            --param imageRegistryPath="${REGISTRY_PATH}" \
-            --param imageRegistryUser="${REGISTRY_USER}" \
+            --param imageRegistryPath="tekton-releases-nightly" \
+            --param imageRegistryUser="tekton-robot" \
             --param imageRegistryRegions="" \
             --param buildPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le" \
             --param publishPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64" \
-            --param koExtraArgs="${KO_EXTRA_ARGS}" \
+            --param koExtraArgs="--preserve-import-paths" \
             --param serviceAccountPath=release.json \
             --param serviceAccountImagesPath=.dockerconfigjson \
-            --param runTests="${RUN_TESTS}" \
-            --param retentionDays="${RETENTION}" \
+            --param runTests="true" \
+            --param retentionDays="30" \
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=ghcr-creds \
-            --pipeline-timeout 2h 2>&1)
-
-          echo "Pipeline start output:"
-          echo "${PIPELINE_START_OUTPUT}"
-
-          # Extract pipeline run name from the output - updated to match actual format
-          PIPELINE_RUN=""
-          if echo "${PIPELINE_START_OUTPUT}" | grep -q "PipelineRun started:"; then
-            PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep "PipelineRun started:" | awk '{print $3}')
-          elif echo "${PIPELINE_START_OUTPUT}" | grep -qE "pipeline-release-nightly-run-[a-z0-9]+"; then
-            # Extract the pipeline run name directly from the output
-            PIPELINE_RUN=$(echo "${PIPELINE_START_OUTPUT}" | grep -oE "pipeline-release-nightly-run-[a-z0-9]+" | head -n1)
-          fi
-
-          # If we still don't have a pipeline run name, try to get the latest one
-          if [[ -z "${PIPELINE_RUN}" ]]; then
-            echo "Could not extract pipeline run name from start output"
-            echo "Attempting to find the most recent pipeline run..."
-            sleep 3  # Give it a moment to be created
-
-            # Try multiple methods to get the pipeline run
-            PIPELINE_RUN=$(tkn pipelinerun list --limit 1 -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-
-            if [[ -z "${PIPELINE_RUN}" ]]; then
-              PIPELINE_RUN=$(kubectl get pipelinerun -l tekton.dev/pipeline=pipeline-release-nightly --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || echo "")
-            fi
-          fi
-
-          if [[ -n "${PIPELINE_RUN}" ]]; then
-            echo "Pipeline run captured: ${PIPELINE_RUN}"
-            echo "PIPELINE_RUN=${PIPELINE_RUN}" >> $GITHUB_ENV
-
-            # Verify the pipeline run exists
-            if tkn pipelinerun describe "${PIPELINE_RUN}" >/dev/null 2>&1; then
-              echo "Pipeline run verified and accessible"
-            else
-              echo "Pipeline run exists but may not be ready yet"
-            fi
-          else
-            echo "Failed to capture pipeline run name"
-            echo "Debug: Available pipeline runs:"
-            tkn pipelinerun list || echo "No pipeline runs found"
-            echo "Debug: Kubernetes pipeline runs:"
-            kubectl get pipelinerun -A || echo "No pipeline runs in cluster"
-
-            # Don't exit here, let the monitoring step handle the empty pipeline run
-            echo "PIPELINE_RUN=" >> $GITHUB_ENV
-          fi
-
-      - name: Monitor Pipeline Execution
-        run: |
-          set -euo pipefail
-          if [ -n "${PIPELINE_RUN:-}" ]; then
-            echo "Monitoring pipeline execution: ${PIPELINE_RUN}"
-            tkn pipelinerun logs ${PIPELINE_RUN} --follow || {
-              echo "Log following failed, showing status instead"
-              tkn pipelinerun describe ${PIPELINE_RUN}
-            }
-          else
-            echo "No pipeline run to monitor"
-          fi
-
-      - name: Show Pipeline Results
-        if: always()
-        run: |
-          set -euo pipefail
-          echo "Pipeline Execution Results"
-          echo "Pipeline run: ${PIPELINE_RUN:-}"
-          if [ -n "${PIPELINE_RUN:-}" ]; then
-            tkn pipelinerun describe ${PIPELINE_RUN} || true
-            tkn pipelinerun logs ${PIPELINE_RUN} --follow=false || true
-          else
-            echo "Pipeline run name not captured - check pipeline start step"
-          fi
+            --pipeline-timeout 2h \
+            --showlog
