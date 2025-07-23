@@ -171,7 +171,6 @@ jobs:
             --param serviceAccountImagesPath=.dockerconfigjson \
             --param releaseAsLatest="false" \
             --param runTests="true" \
-            --param retentionDays="30" \
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=ghcr-creds \
