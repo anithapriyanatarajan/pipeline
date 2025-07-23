@@ -73,7 +73,7 @@ spec:
     - name: release-file-no-tag
       value: $(tasks.report-bucket.results.release-no-tag)
     - name: release-mode
-      value: $(params.releaseMode)
+      value: $(tasks.set-defaults.results.releaseMode)
 
   tasks:
     - name: set-defaults
@@ -88,6 +88,7 @@ spec:
           - name: releaseBucket
           - name: releaseAsLatest
           - name: imageRegistryRegions
+          - name: releaseMode
         steps:
           - name: compute-defaults
             image: docker.io/library/alpine:3.20.3
@@ -120,6 +121,7 @@ spec:
               echo -n "${BUCKET}" > $(results.releaseBucket.path)
               echo -n "${LATEST}" > $(results.releaseAsLatest.path)
               echo -n "${REGIONS}" > $(results.imageRegistryRegions.path)
+              echo -n "$(params.releaseMode)" > $(results.releaseMode.path)
       params:
         - name: releaseMode
           value: $(params.releaseMode)
