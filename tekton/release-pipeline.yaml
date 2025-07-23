@@ -1,54 +1,57 @@
 ---
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: pipeline-release
 spec:
   params:
-  - name: package
-    description: package to release
-    default: github.com/tektoncd/pipeline
-  - name: gitRevision
-    description: the git revision to release
-  - name: imageRegistry
-    description: The target image registry
-    default: ghcr.io
-  - name: imageRegistryPath
-    description: The path (project) in the image registry
-    default: tekton-releases
-  - name: imageRegistryRegions
-    description: The target image registry regions
-    default: "us eu asia"
-  - name: imageRegistryUser
-    description: The user for the image registry credentials
-    default: _json_key
-  - name: versionTag
-    description: The X.Y.Z version that the artifacts should be tagged with
-  - name: releaseBucket
-    description: bucket where the release is stored. The bucket must be project specific.
-    default: gs://tekton-releases-nightly/pipeline
-  - name: releaseAsLatest
-    description: Whether to tag and publish this release as Pipelines' latest
-    default: "true"
-  - name: buildPlatforms
-    description: Platforms to build images for (e.g. linux/amd64,linux/arm64)
-    default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
-  - name: publishPlatforms
-    description: |
-      Platforms to publish images for (e.g. linux/amd64,linux/arm64,windows/amd64). This
-      can differ from buildPlatforms due to the fact that a windows-compatible base image
-      is constructed for the publishing phase.
-    default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64
-  - name: koExtraArgs
-    description: Extra args to be passed to ko
-    default: "--preserve-import-paths"
-  - name: serviceAccountPath
-    description: The path to the service account file within the release-secret workspace
-  - name: serviceAccountImagesPath
-    description: The path to the service account file or credentials within the release-images-secret workspace
-  - name: runTests
-    description: If set to something other than "true", skip the build and test tasks
-    default: "true"
+    - name: releaseMode
+      description: "Release mode: 'stable' for production releases, 'nightly' for nightly builds"
+      default: "stable"
+    - name: package
+      description: package to release
+      default: github.com/tektoncd/pipeline
+    - name: gitRevision
+      description: the git revision to release
+    - name: imageRegistry
+      description: The target image registry
+      default: ghcr.io
+    - name: imageRegistryPath
+      description: The path (project) in the image registry
+      default: "tekton-releases-nightly"  # Will be overridden based on releaseMode
+    - name: imageRegistryRegions
+      description: The target image registry regions
+      default: ""  # Empty for GHCR, "us eu asia" for GCR
+    - name: imageRegistryUser
+      description: The user for the image registry credentials
+      default: _json_key
+    - name: versionTag
+      description: Version tag (X.Y.Z for stable, vYYYYMMDD-abc1234 for nightly)
+    - name: releaseBucket
+      description: bucket where the release is stored. The bucket must be project specific.
+      default: "gs://tekton-releases-nightly/pipeline"  # Will be overridden based on releaseMode
+    - name: releaseAsLatest
+      description: Whether to tag and publish this release as latest
+      default: "false"  # Will be overridden based on releaseMode
+    - name: buildPlatforms
+      description: Platforms to build images for (e.g. linux/amd64,linux/arm64)
+      default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+    - name: publishPlatforms
+      description: |
+        Platforms to publish images for (e.g. linux/amd64,linux/arm64,windows/amd64). This
+        can differ from buildPlatforms due to the fact that a windows-compatible base image
+        is constructed for the publishing phase.)
+      default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64
+    - name: koExtraArgs
+      description: Extra args to be passed to ko
+      default: "--preserve-import-paths"
+    - name: serviceAccountPath
+      description: The path to the service account file within the release-secret workspace
+    - name: serviceAccountImagesPath
+      description: The path to the service account file or credentials within the release-images-secret workspace
+    - name: runTests
+      description: If set to something other than "true", skip the build and test tasks
+      default: "true"
   workspaces:
     - name: workarea
       description: The workspace where the repo will be cloned.
@@ -69,12 +72,14 @@ spec:
   tasks:
     - name: git-clone
       taskRef:
-        resolver: hub
+        resolver: bundles
         params:
+          - name: bundle
+            value: ghcr.io/tektoncd/catalog/upstream/tasks/git-clone:0.10
           - name: name
             value: git-clone
-          - name: version
-            value: "0.10"
+          - name: kind
+            value: task
       workspaces:
         - name: output
           workspace: workarea
@@ -84,17 +89,18 @@ spec:
           value: https://$(params.package)
         - name: revision
           value: $(params.gitRevision)
+
     - name: precheck
       runAfter: [git-clone]
       taskRef:
         resolver: git
         params:
-          - name: repo
-            value: plumbing
+          - name: url
+            value: https://github.com/tektoncd/plumbing
           - name: org
             value: tektoncd
           - name: revision
-            value: aeed19e5a36f335ebfdc4b96fa78d1ce5bb4f7b8
+            value: main
           - name: pathInRepo
             value: tekton/resources/release/base/prerelease_checks.yaml
       params:
@@ -108,10 +114,13 @@ spec:
         - name: source-to-release
           workspace: workarea
           subPath: git
+
     - name: unit-tests
       runAfter: [precheck]
       when:
-        - cel: "'$(params.runTests)' == 'true'"
+        - input: "$(params.runTests)"
+          operator: in
+          values: ["true"]
       taskRef:
         resolver: bundles
         params:
@@ -124,16 +133,21 @@ spec:
       params:
         - name: package
           value: $(params.package)
+        - name: packages
+          value: "./..."
         - name: flags
           value: -v -mod=vendor
       workspaces:
         - name: source
           workspace: workarea
           subPath: git
+
     - name: build
       runAfter: [precheck]
       when:
-        - cel: "'$(params.runTests)' == 'true'"
+        - input: "$(params.runTests)"
+          operator: in
+          values: ["true"]
       taskRef:
         resolver: bundles
         params:
@@ -152,20 +166,14 @@ spec:
         - name: source
           workspace: workarea
           subPath: git
+
     - name: publish-images
       runAfter: [unit-tests, build]
       taskRef:
-        resolver: git
-        params:
-          - name: repo
-            value: pipeline
-          - name: org
-            value: tektoncd
-          - name: revision
-            value: $(params.gitRevision)
-          - name: pathInRepo
-            value: tekton/publish.yaml
+        name: publish-release-unified
       params:
+        - name: releaseMode
+          value: $(params.releaseMode)
         - name: package
           value: $(params.package)
         - name: versionTag
@@ -276,7 +284,6 @@ spec:
                 value: $(params.versionTag)
             script: |
               BASE_URL=$(echo "${RELEASE_BUCKET}/previous/${VERSION_TAG}")
-              # If the bucket is in the gs:// return the corresponding public https URL
               BASE_URL=$(echo ${BASE_URL} | sed 's,gs://,https://storage.googleapis.com/,g')
               echo "${BASE_URL}/release.yaml" > $(results.release.path)
               echo "${BASE_URL}/release.notag.yaml" > $(results.release-no-tag.path)
