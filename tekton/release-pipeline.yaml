@@ -170,7 +170,7 @@ spec:
     - name: publish-images
       runAfter: [unit-tests, build]
       taskRef:
-        name: publish-release-unified
+        name: publish-release
       params:
         - name: releaseMode
           value: $(params.releaseMode)
