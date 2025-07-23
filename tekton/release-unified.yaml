@@ -73,67 +73,10 @@ spec:
     - name: release-file-no-tag
       value: $(tasks.report-bucket.results.release-no-tag)
     - name: release-mode
-      value: $(tasks.set-defaults.results.releaseMode)
+      value: $(params.releaseMode)
 
   tasks:
-    - name: set-defaults
-      taskSpec:
-        params:
-          - name: releaseMode
-          - name: imageRegistryPath
-          - name: releaseBucket
-          - name: releaseAsLatest
-        results:
-          - name: imageRegistryPath
-          - name: releaseBucket
-          - name: releaseAsLatest
-          - name: imageRegistryRegions
-          - name: releaseMode
-        steps:
-          - name: compute-defaults
-            image: docker.io/library/alpine:3.20.3
-            script: |
-              #!/bin/sh
-              
-              if [ "$(params.releaseMode)" = "nightly" ]; then
-                # Nightly defaults
-                REGISTRY_PATH=$(params.imageRegistryPath)
-                BUCKET=$(params.releaseBucket)
-                LATEST=$(params.releaseAsLatest)
-                
-                [ -z "${REGISTRY_PATH}" ] && REGISTRY_PATH="tekton-releases-nightly"
-                [ -z "${BUCKET}" ] && BUCKET="gs://tekton-releases-nightly/pipeline"
-                [ -z "${LATEST}" ] && LATEST="false"
-                REGIONS=""
-              else
-                # Stable defaults (default mode)
-                REGISTRY_PATH=$(params.imageRegistryPath)
-                BUCKET=$(params.releaseBucket)
-                LATEST=$(params.releaseAsLatest)
-                
-                [ -z "${REGISTRY_PATH}" ] && REGISTRY_PATH="tekton-releases"
-                [ -z "${BUCKET}" ] && BUCKET="gs://tekton-releases/pipeline"
-                [ -z "${LATEST}" ] && LATEST="true"
-                REGIONS="us eu asia"
-              fi
-              
-              echo -n "${REGISTRY_PATH}" > $(results.imageRegistryPath.path)
-              echo -n "${BUCKET}" > $(results.releaseBucket.path)
-              echo -n "${LATEST}" > $(results.releaseAsLatest.path)
-              echo -n "${REGIONS}" > $(results.imageRegistryRegions.path)
-              echo -n "$(params.releaseMode)" > $(results.releaseMode.path)
-      params:
-        - name: releaseMode
-          value: $(params.releaseMode)
-        - name: imageRegistryPath
-          value: $(params.imageRegistryPath)
-        - name: releaseBucket
-          value: $(params.releaseBucket)
-        - name: releaseAsLatest
-          value: $(params.releaseAsLatest)
-
     - name: git-clone
-      runAfter: [set-defaults]
       taskRef:
         resolver: bundles
         params:
@@ -172,7 +115,7 @@ spec:
         - name: versionTag
           value: $(params.versionTag)
         - name: releaseBucket
-          value: $(tasks.set-defaults.results.releaseBucket)
+          value: $(params.releaseBucket)
       workspaces:
         - name: source-to-release
           workspace: workarea
@@ -244,13 +187,13 @@ spec:
         - name: imageRegistry
           value: $(params.imageRegistry)
         - name: imageRegistryPath
-          value: $(tasks.set-defaults.results.imageRegistryPath)
+          value: $(params.imageRegistryPath)
         - name: imageRegistryUser
           value: $(params.imageRegistryUser)
         - name: imageRegistryRegions
-          value: $(tasks.set-defaults.results.imageRegistryRegions)
+          value: $(params.imageRegistryRegions)
         - name: releaseAsLatest
-          value: $(tasks.set-defaults.results.releaseAsLatest)
+          value: $(params.releaseAsLatest)
         - name: serviceAccountPath
           value: $(params.serviceAccountImagesPath)
         - name: platforms
@@ -287,7 +230,7 @@ spec:
           subPath: bucket
       params:
         - name: location
-          value: $(tasks.set-defaults.results.releaseBucket)/previous/$(params.versionTag)
+          value: $(params.releaseBucket)/previous/$(params.versionTag)
         - name: path
           value: $(params.versionTag)
         - name: serviceAccountPath
@@ -296,7 +239,7 @@ spec:
     - name: publish-latest
       runAfter: [publish-to-bucket]
       when:
-        - input: "$(tasks.set-defaults.results.releaseAsLatest)"
+        - input: "$(params.releaseAsLatest)"
           operator: in
           values: ["true"]
       taskRef:
@@ -316,7 +259,7 @@ spec:
           subPath: bucket
       params:
         - name: location
-          value: $(tasks.set-defaults.results.releaseBucket)/latest
+          value: $(params.releaseBucket)/latest
         - name: path
           value: $(params.versionTag)
         - name: serviceAccountPath
@@ -328,7 +271,7 @@ spec:
       runAfter: [publish-to-bucket]
       params:
         - name: releaseBucket
-          value: $(tasks.set-defaults.results.releaseBucket)
+          value: $(params.releaseBucket)
         - name: versionTag
           value: $(params.versionTag)
       taskSpec:
