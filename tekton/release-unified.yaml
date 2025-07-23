@@ -72,8 +72,6 @@ spec:
       value: $(tasks.report-bucket.results.release)
     - name: release-file-no-tag
       value: $(tasks.report-bucket.results.release-no-tag)
-    - name: release-mode
-      value: $(params.releaseMode)
 
   tasks:
     - name: git-clone
