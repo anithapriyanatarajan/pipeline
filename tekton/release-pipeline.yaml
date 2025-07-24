@@ -94,8 +94,6 @@ spec:
         params:
           - name: url
             value: https://github.com/tektoncd/plumbing
-          - name: org
-            value: tektoncd
           - name: revision
             value: main
           - name: pathInRepo
@@ -115,9 +113,7 @@ spec:
     - name: unit-tests
       runAfter: [precheck]
       when:
-        - input: "$(params.runTests)"
-          operator: in
-          values: ["true"]
+        - cel: "'$(params.runTests)' == 'true'"
       taskRef:
         resolver: bundles
         params:
@@ -142,9 +138,7 @@ spec:
     - name: build
       runAfter: [precheck]
       when:
-        - input: "$(params.runTests)"
-          operator: in
-          values: ["true"]
+        - cel: "'$(params.runTests)' == 'true'"
       taskRef:
         resolver: bundles
         params:
@@ -167,7 +161,16 @@ spec:
     - name: publish-images
       runAfter: [unit-tests, build]
       taskRef:
-        name: publish-release
+        resolver: git
+        params:
+          - name: repo
+            value: pipeline
+          - name: org
+            value: tektoncd
+          - name: revision
+            value: $(params.gitRevision)
+          - name: pathInRepo
+            value: tekton/publish.yaml
       params:
         - name: package
           value: $(params.package)
@@ -279,6 +282,7 @@ spec:
                 value: $(params.versionTag)
             script: |
               BASE_URL=$(echo "${RELEASE_BUCKET}/previous/${VERSION_TAG}")
+              # If the bucket is in the gs:// return the corresponding public https URL
               BASE_URL=$(echo ${BASE_URL} | sed 's,gs://,https://storage.googleapis.com/,g')
               echo "${BASE_URL}/release.yaml" > $(results.release.path)
               echo "${BASE_URL}/release.notag.yaml" > $(results.release-no-tag.path)

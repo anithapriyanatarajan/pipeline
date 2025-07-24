@@ -44,7 +44,7 @@ consumers of a project. In that case we'll make a patch release. To make one:
    [patch version incremented](https://semver.org/)
 1. Close the milestone.
 
-## Nightly releases
+## Nightly Builds
 
 [The nightly release pipeline](release-pipeline.yaml) is
 [triggered nightly by Tekton](https://github.com/tektoncd/plumbing/tree/main/tekton)
