@@ -10,16 +10,6 @@ on:
         description: 'Kubernetes version to test with'
         required: false
         default: 'v1.33.0'
-        type: choice
-        options:
-          - v1.33.0
-          - v1.32.0
-          - v1.31.0
-      dry_run:
-        description: 'Perform dry run (no actual publishing)'
-        required: false
-        default: false
-        type: boolean
       nightly_bucket:
         description: 'Nightly bucket for builds'
         required: false
@@ -38,7 +28,6 @@ on:
 env:
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   REGISTRY: ghcr.io
-  DRY_RUN: ${{ inputs.dry_run || false }}
 
   COMPONENT: pipeline
 
@@ -86,10 +75,12 @@ jobs:
           setup_registry: "true"
           patch_etc_hosts: "true"
 
-      - name: Configure Tekton Git Resolver
+      - name: Configure Tekton Git Resolver & CEL expression
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
+          kubectl get namespace
+
           kubectl create secret generic git-resolver-secret \
             --from-literal=token="${GITHUB_TOKEN}" \
             -n tekton-pipelines-resolvers || true
@@ -111,6 +102,11 @@ jobs:
             server-url: "https://api.github.com"
             api-token-secret-name: "git-resolver-secret"
             api-token-secret-key: "token"
+          ' || true
+ 
+          kubetl patch configmap feature-flags -n tekton-pipelines --patch='
+          data:
+            enable-cel-in-whenexpression: "true"
           ' || true
 
       - name: Install tkn CLI
@@ -168,7 +164,7 @@ jobs:
             --param koExtraArgs="--preserve-import-paths" \
             --param serviceAccountPath=release.json \
             --param serviceAccountImagesPath=.dockerconfigjson \
-            --param releaseAsLatest="false" \
+            --param releaseAsLatest="true" \
             --param runTests="false" \
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
