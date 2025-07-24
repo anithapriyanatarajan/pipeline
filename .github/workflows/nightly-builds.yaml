@@ -79,27 +79,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
-          kubectl get namespace
-
           kubectl create secret generic git-resolver-secret \
             --from-literal=token="${GITHUB_TOKEN}" \
             -n tekton-pipelines-resolvers || true
 
-          kubectl patch configmap resolvers-feature-flags -n tekton-pipelines-resolvers --patch='
-          data:
-            enable-git-resolver: "true"
-            enable-hub-resolver: "true"
-            enable-bundles-resolver: "true"
-            enable-cluster-resolver: "true"
-          ' || true
-
+          kubectl create secret generic git-resolver-secret \
+            --from-literal=token="${GITHUB_TOKEN}" \
+            -n default || true   
+          
           kubectl patch configmap git-resolver-config -n tekton-pipelines-resolvers --patch='
           data:
-            default-url: "https://github.com"
-            default-revision: "main"
-            fetch-timeout: "1m"
-            scm-type: "github"
-            server-url: "https://api.github.com"
             api-token-secret-name: "git-resolver-secret"
             api-token-secret-key: "token"
           ' || true
