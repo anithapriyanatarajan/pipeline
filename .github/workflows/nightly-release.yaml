@@ -131,7 +131,7 @@ jobs:
           echo "${GCS_SERVICE_ACCOUNT_KEY}" > /tmp/gcs-key.json
           kubectl create secret generic release-secret \
             --from-file=release.json=/tmp/gcs-key.json
-          rm -f /tmp/gcs-key.jsonGive
+          rm -f /tmp/gcs-key.json
 
           kubectl create secret docker-registry ghcr-creds \
             --docker-server=ghcr.io \
@@ -155,7 +155,6 @@ jobs:
           echo "Starting Tekton pipeline..."
 
           PIPELINE_RUN=$(tkn pipeline start pipeline-release \
-            --param releaseMode="nightly" \
             --param package="${{ env.PACKAGE }}" \
             --param gitRevision="${{ steps.version.outputs.latest_sha }}" \
             --param versionTag="${{ steps.version.outputs.version_tag }}" \
