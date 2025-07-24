@@ -6,9 +6,6 @@ metadata:
     chains.tekton.dev/transparency-upload: "true"
 spec:
   params:
-    - name: releaseMode
-      description: "Release mode: 'stable' for production releases, 'nightly' for nightly builds"
-      default: "stable"
     - name: package
       description: package to release (e.g. github.com/<org>/<project>)
       default: github.com/tektoncd/pipeline
@@ -69,8 +66,6 @@ spec:
         value: "$(workspaces.output.path)/$(params.versionTag)"
       - name: KO_EXTRA_ARGS
         value: "$(params.koExtraArgs)"
-      - name: RELEASE_MODE
-        value: "$(params.releaseMode)"
   results:
   # IMAGES result is picked up by Tekton Chains to sign the release.
   # See https://github.com/tektoncd/plumbing/blob/main/docs/signing.md for more info.
@@ -120,39 +115,23 @@ spec:
       # Change to directory with vendor/
       cd ${PROJECT_ROOT}
 
-      if [ "${RELEASE_MODE}" = "stable" ]; then
-        # Stable mode: Traditional registry path handling
-        COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
-        # If the IMAGE_REGISTRY_PATH does not already includes the package, add it
-        # Package looks like github.com/<org>/<repo>
-        # Path may look like "tekton-releases" or "tektoncd/pipeline"
-        if [[ ! "$(params.package)" == "github.com/${IMAGE_REGISTRY_PATH}" ]]; then
-          COMBINED_BASE_IMAGE_BASE=${COMBINED_BASE_IMAGE_BASE}/${IMAGE_REGISTRY_PATH}
-        fi
+      # Set base image registry path - same for both modes
+      COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
 
-        # Use full package paths for stable releases
+      # Determine image path format based on ko args
+      # Both stable and nightly can use --preserve-import-paths
+      if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
+        # Use full package paths when preserve-import-paths is enabled
         ENTRYPOINT_PATH="$(params.package)/cmd/entrypoint"
         NOP_PATH="$(params.package)/cmd/nop"
         WORKINGDIRINIT_PATH="$(params.package)/cmd/workingdirinit"
         RESOLVERS_PATH="$(params.package)/cmd/resolvers"
       else
-        # Nightly mode: Use the container registry path directly
-        COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
-
-        # Check if we're using --preserve-import-paths to determine the image path format
-        if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
-          # Use full package paths when preserve-import-paths is enabled
-          ENTRYPOINT_PATH="$(params.package)/cmd/entrypoint"
-          NOP_PATH="$(params.package)/cmd/nop"
-          WORKINGDIRINIT_PATH="$(params.package)/cmd/workingdirinit"
-          RESOLVERS_PATH="$(params.package)/cmd/resolvers"
-        else
-          # Use simplified paths when preserve-import-paths is not used
-          ENTRYPOINT_PATH="./cmd/entrypoint"
-          NOP_PATH="./cmd/nop"
-          WORKINGDIRINIT_PATH="./cmd/workingdirinit"
-          RESOLVERS_PATH="./cmd/resolvers"
-        fi
+        # Use simplified paths when preserve-import-paths is not used
+        ENTRYPOINT_PATH="./cmd/entrypoint"
+        NOP_PATH="./cmd/nop"
+        WORKINGDIRINIT_PATH="./cmd/workingdirinit"
+        RESOLVERS_PATH="./cmd/resolvers"
       fi
 
       # Combine Distroless with a Windows base image, used for the entrypoint image.

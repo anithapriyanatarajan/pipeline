@@ -5,9 +5,6 @@ metadata:
   name: pipeline-release
 spec:
   params:
-    - name: releaseMode
-      description: "Release mode: 'stable' for production releases, 'nightly' for nightly builds"
-      default: "stable"
     - name: package
       description: package to release
       default: github.com/tektoncd/pipeline
@@ -172,8 +169,6 @@ spec:
       taskRef:
         name: publish-release
       params:
-        - name: releaseMode
-          value: $(params.releaseMode)
         - name: package
           value: $(params.package)
         - name: versionTag
