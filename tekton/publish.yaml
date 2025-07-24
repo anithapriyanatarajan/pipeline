@@ -27,10 +27,10 @@ spec:
       default: ""
     - name: imageRegistryUser
       description: Username to be used to login to the container registry
-      default: ""
+      default: "_json_key"
     - name: releaseAsLatest
       description: Whether to tag and publish this release as Pipelines latest
-      default: "false"
+      default: "true"
     - name: platforms
       description: Platforms to publish for the images (e.g. linux/amd64,linux/arm64)
       default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64
@@ -78,31 +78,21 @@ spec:
       #!/bin/sh
       set -ex
 
-      echo "Setting up container registry authentication"
+      # Login to the container registry
+      DOCKER_CONFIG=$(cat ${CONTAINER_REGISTRY_CREDENTIALS} | \
+        crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 2>&1 | \
+        sed -n 's,^.*logged in via \(.*\)$,\1,p')
 
-      # Check for Docker registry secret format first (kubectl create secret docker-registry)
-      if [[ -f "$(workspaces.release-secret.path)/.dockerconfigjson" ]]; then
-        echo "Using Docker registry secret"
-        cp "$(workspaces.release-secret.path)/.dockerconfigjson" /workspace/docker-config.json
-      elif [[ -f "${CONTAINER_REGISTRY_CREDENTIALS}" ]]; then
-        echo "Using service account credentials"
-        # Check if it's already a docker config format
-        if jq -e '.auths' "${CONTAINER_REGISTRY_CREDENTIALS}" >/dev/null 2>&1; then
-          cp "${CONTAINER_REGISTRY_CREDENTIALS}" /workspace/docker-config.json
-        else
-          # Create docker config from token/credentials
-          TOKEN=$(cat "${CONTAINER_REGISTRY_CREDENTIALS}")
-          echo "{\"auths\":{\"$(params.imageRegistry)\":{\"auth\":\"$(echo -n "${CONTAINER_REGISTRY_USER}:${TOKEN}" | base64 -w 0)\"}}}" > /workspace/docker-config.json
-        fi
-      else
-        echo "ERROR: No valid credentials found"
-        exit 1
-      fi
-
-      echo "Authentication configured successfully"
+      # Auth with account credentials for all regions.
+      for region in ${REGIONS}
+      do
+        HOSTNAME=${region}.$(params.imageRegistry)
+        cat ${CONTAINER_REGISTRY_CREDENTIALS} | crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin ${HOSTNAME}
+      done
+      cp ${DOCKER_CONFIG} /workspace/docker-config.json
 
   - name: create-ko-yaml
-    image: cgr.dev/chainguard/go:latest-dev@sha256:8590e18f17e78ac98dd0b38cd98cd3c8cefc5348dc8ed10b6e6ccfecee08d4a6
+    image: cgr.dev/chainguard/go:latest-dev@sha256:8e2632f8725d1a48d6f97a13c71e1594fe17dc9c0e7d00543091a04ac82e429b
     script: |
       #!/bin/sh
       set -ex
@@ -115,23 +105,12 @@ spec:
       # Change to directory with vendor/
       cd ${PROJECT_ROOT}
 
-      # Set base image registry path - same for both modes
       COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
-
-      # Determine image path format based on ko args
-      # Both stable and nightly can use --preserve-import-paths
-      if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
-        # Use full package paths when preserve-import-paths is enabled
-        ENTRYPOINT_PATH="$(params.package)/cmd/entrypoint"
-        NOP_PATH="$(params.package)/cmd/nop"
-        WORKINGDIRINIT_PATH="$(params.package)/cmd/workingdirinit"
-        RESOLVERS_PATH="$(params.package)/cmd/resolvers"
-      else
-        # Use simplified paths when preserve-import-paths is not used
-        ENTRYPOINT_PATH="./cmd/entrypoint"
-        NOP_PATH="./cmd/nop"
-        WORKINGDIRINIT_PATH="./cmd/workingdirinit"
-        RESOLVERS_PATH="./cmd/resolvers"
+      # If the IMAGE_REGISTRY_PATH does not already includes the package, add it
+      # Package looks like github.com/<org>/<repo>
+      # Path may look like "tekton-releases" or "tektoncd/pipeline"
+      if [[ ! "$(params.package)" == "github.com/${IMAGE_REGISTRY_PATH}" ]]; then
+        COMBINED_BASE_IMAGE_BASE=${COMBINED_BASE_IMAGE_BASE}/${IMAGE_REGISTRY_PATH}
       fi
 
       # Combine Distroless with a Windows base image, used for the entrypoint image.
@@ -143,22 +122,21 @@ spec:
         ${COMBINED_BASE_IMAGE_BASE}/combined-base-image:latest)
 
       # NOTE: Make sure this list of images to use the combined base image is in sync with what's in test/presubmit-tests.sh's 'ko_resolve' function.
-
       cat <<EOF > /workspace/.ko.yaml
       # This matches the value configured in .ko.yaml
       defaultBaseImage: cgr.dev/chainguard/static@sha256:67a1b00e0134e2b3a614c7198a26f7deed9d11b7acad4d52c79c0cfd47a2eae7
       baseImageOverrides:
         # Use the combined base image for images that should include Windows support.
-        ${ENTRYPOINT_PATH}: ${COMBINED_BASE_IMAGE}
-        ${NOP_PATH}: ${COMBINED_BASE_IMAGE}
-        ${WORKINGDIRINIT_PATH}: ${COMBINED_BASE_IMAGE}
-        ${RESOLVERS_PATH}: cgr.dev/chainguard/git@sha256:566235a8ef752f37d285042ee05fc37dbb04293e50f116a231984080fb835693
+        $(params.package)/cmd/entrypoint: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/nop: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/workingdirinit: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/resolvers: cgr.dev/chainguard/git@sha256:566235a8ef752f37d285042ee05fc37dbb04293e50f116a231984080fb835693
       EOF
 
       cat /workspace/.ko.yaml
 
   - name: run-ko
-    image: ghcr.io/tektoncd/plumbing/ko@sha256:3c05fef6e7c38295b781c632c07437a55d57e1b1d42eb482fbb36e3ad9e73cea
+    image: ghcr.io/tektoncd/plumbing/ko@sha256:d21b05e426096c01ea026678a94d019f860e5ba04929b5fd2dd8bb0aaccf31d2
     env:
     - name: KO_DOCKER_REPO
       value: $(params.imageRegistry)/$(params.imageRegistryPath)
@@ -223,7 +201,6 @@ spec:
       # Rewrite "devel" to params.versionTag
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.yaml
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.notags.yaml
-
   - name: koparse
     image: ghcr.io/tektoncd/plumbing/koparse@sha256:1898ef549aaff602d06c049136aaf1c1eacc573846c42bbf42d8dc9258235204
     script: |
@@ -259,7 +236,7 @@ spec:
         ${PRESERVE_IMPORT_PATH} > /workspace/built_images
 
   - name: tag-images
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:68d9b984ee9cb5ff9cf7a779e8bdf3c2022f9042abfa1f0f5727a082a9429535
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:430c7813147443b59185d79ce7f5d682698a9fc3072f100850dc3a04100c1d91
     script: |
       #!/bin/sh
       set -ex
