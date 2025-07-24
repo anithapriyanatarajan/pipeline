@@ -179,6 +179,10 @@ spec:
     script: |
       #!/usr/bin/env sh
       set -ex
+      
+      # Fix Git ownership issue for the repository directory
+      git config --global --add safe.directory /go/src/repo
+      git config --global --add safe.directory ${PROJECT_ROOT}
 
       # Use the generated `.ko.yaml`
       export KO_CONFIG_PATH=/workspace
@@ -265,7 +269,7 @@ spec:
         --container-registry ${CONTAINER_REGISTRY} \
         --images ${IMAGES} \
         ${PRESERVE_IMPORT_PATH} > /workspace/built_images
-        
+
   - name: tag-images
     image: cgr.dev/chainguard/crane:latest-dev@sha256:430c7813147443b59185d79ce7f5d682698a9fc3072f100850dc3a04100c1d91
     script: |
