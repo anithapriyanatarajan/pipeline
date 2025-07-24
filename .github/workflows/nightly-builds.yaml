@@ -104,7 +104,7 @@ jobs:
             api-token-secret-key: "token"
           ' || true
  
-          kubetl patch configmap feature-flags -n tekton-pipelines --patch='
+          kubectl patch configmap feature-flags -n tekton-pipelines --patch='
           data:
             enable-cel-in-whenexpression: "true"
           ' || true
