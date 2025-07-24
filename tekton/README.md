@@ -47,7 +47,9 @@ consumers of a project. In that case we'll make a patch release. To make one:
 ## Nightly releases
 
 [The nightly release pipeline](release-pipeline.yaml) is
-[triggered nightly by Tekton](https://github.com/tektoncd/plumbing/tree/main/tekton).
+[triggered nightly by Tekton](https://github.com/tektoncd/plumbing/tree/main/tekton)
+
+There is also a [github workflow](https://github.com/tektoncd/pipeline/tree/main/.github/workflows/nightly-builds.yaml) defined to trigger the release pipeline which completes nightly builds on a kind clustere.
 
 This Pipeline uses:
 
