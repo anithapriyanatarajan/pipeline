@@ -26,14 +26,14 @@ on:
         default: 'gs://tekton-releases-nightly/pipeline'
         type: string
   # uncomment the following to enable manual testing of the workflow
-  # push:
-  #   branches:
-  #     - test-rel
-  #   paths:
-  #     - '.github/workflows/nightly-builds.yaml'
-  #     - 'tekton/**'
-  #     - 'cmd/**'
-  #     - 'pkg/**'
+  push:
+    branches:
+      - test-rel
+    paths:
+      - '.github/workflows/nightly-builds.yaml'
+      - 'tekton/**'
+      - 'cmd/**'
+      - 'pkg/**'
 
 env:
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
