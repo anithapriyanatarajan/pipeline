@@ -126,7 +126,7 @@ spec:
       fi
 
   - name: create-ko-yaml
-    image: cgr.dev/chainguard/go:latest-dev@sha256:8590e18f17e78ac98dd0b38cd98cd3c8cefc5348dc8ed10b6e6ccfecee08d4a6
+    image: cgr.dev/chainguard/go:latest-dev@sha256:8e2632f8725d1a48d6f97a13c71e1594fe17dc9c0e7d00543091a04ac82e429b
     script: |
       #!/bin/sh
       set -ex
@@ -139,8 +139,13 @@ spec:
       # Change to directory with vendor/
       cd ${PROJECT_ROOT}
 
-      # Use the container registry path directly - it already includes the full path
       COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
+      # If the IMAGE_REGISTRY_PATH does not already includes the package, add it
+      # Package looks like github.com/<org>/<repo>
+      # Path may look like "tekton-releases" or "tektoncd/pipeline"
+      if [[ ! "$(params.package)" == "github.com/${IMAGE_REGISTRY_PATH}" ]]; then
+        COMBINED_BASE_IMAGE_BASE=${COMBINED_BASE_IMAGE_BASE}/${IMAGE_REGISTRY_PATH}
+      fi
 
       # Combine Distroless with a Windows base image, used for the entrypoint image.
       # Distroless is pinned to the last version based on Alpine 3.18. Newer versions are based on Alpine 3.19_alpha20230901.
@@ -151,37 +156,21 @@ spec:
         ${COMBINED_BASE_IMAGE_BASE}/combined-base-image:latest)
 
       # NOTE: Make sure this list of images to use the combined base image is in sync with what's in test/presubmit-tests.sh's 'ko_resolve' function.
-
-      # Check if we're using --preserve-import-paths to determine the image path format
-      if echo "${KO_EXTRA_ARGS}" | grep -q "\-\-preserve-import-paths"; then
-        # Use full package paths when preserve-import-paths is enabled
-        ENTRYPOINT_PATH="$(params.package)/cmd/entrypoint"
-        NOP_PATH="$(params.package)/cmd/nop"
-        WORKINGDIRINIT_PATH="$(params.package)/cmd/workingdirinit"
-        RESOLVERS_PATH="$(params.package)/cmd/resolvers"
-      else
-        # Use simplified paths when preserve-import-paths is not used
-        ENTRYPOINT_PATH="./cmd/entrypoint"
-        NOP_PATH="./cmd/nop"
-        WORKINGDIRINIT_PATH="./cmd/workingdirinit"
-        RESOLVERS_PATH="./cmd/resolvers"
-      fi
-
       cat <<EOF > /workspace/.ko.yaml
       # This matches the value configured in .ko.yaml
       defaultBaseImage: cgr.dev/chainguard/static@sha256:67a1b00e0134e2b3a614c7198a26f7deed9d11b7acad4d52c79c0cfd47a2eae7
       baseImageOverrides:
         # Use the combined base image for images that should include Windows support.
-        ${ENTRYPOINT_PATH}: ${COMBINED_BASE_IMAGE}
-        ${NOP_PATH}: ${COMBINED_BASE_IMAGE}
-        ${WORKINGDIRINIT_PATH}: ${COMBINED_BASE_IMAGE}
-        ${RESOLVERS_PATH}: cgr.dev/chainguard/git@sha256:566235a8ef752f37d285042ee05fc37dbb04293e50f116a231984080fb835693
+        $(params.package)/cmd/entrypoint: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/nop: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/workingdirinit: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/resolvers: cgr.dev/chainguard/git@sha256:566235a8ef752f37d285042ee05fc37dbb04293e50f116a231984080fb835693
       EOF
 
       cat /workspace/.ko.yaml
 
   - name: run-ko
-    image: ghcr.io/tektoncd/plumbing/ko@sha256:3c05fef6e7c38295b781c632c07437a55d57e1b1d42eb482fbb36e3ad9e73cea
+    image: ghcr.io/tektoncd/plumbing/ko@sha256:d21b05e426096c01ea026678a94d019f860e5ba04929b5fd2dd8bb0aaccf31d2
     env:
     - name: KO_DOCKER_REPO
       value: $(params.imageRegistry)/$(params.imageRegistryPath)
@@ -190,9 +179,6 @@ spec:
     script: |
       #!/usr/bin/env sh
       set -ex
-
-      # Fix Git ownership issue for the repository directory
-      git config --global --add safe.directory ${PROJECT_ROOT}
 
       # Use the generated `.ko.yaml`
       export KO_CONFIG_PATH=/workspace
@@ -246,7 +232,6 @@ spec:
       # Rewrite "devel" to params.versionTag
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.yaml
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.notags.yaml
-
   - name: koparse
     image: ghcr.io/tektoncd/plumbing/koparse@sha256:1898ef549aaff602d06c049136aaf1c1eacc573846c42bbf42d8dc9258235204
     script: |
@@ -280,7 +265,7 @@ spec:
         --container-registry ${CONTAINER_REGISTRY} \
         --images ${IMAGES} \
         ${PRESERVE_IMPORT_PATH} > /workspace/built_images
-
+        
   - name: tag-images
     image: cgr.dev/chainguard/crane:latest-dev@sha256:430c7813147443b59185d79ce7f5d682698a9fc3072f100850dc3a04100c1d91
     script: |
