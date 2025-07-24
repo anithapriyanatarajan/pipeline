@@ -30,7 +30,7 @@ on:
     branches:
       - test-rel
     paths:
-      - '.github/workflows/nightly-release.yaml'
+      - '.github/workflows/nightly-builds.yaml'
       - 'tekton/**'
       - 'cmd/**'
       - 'pkg/**'
