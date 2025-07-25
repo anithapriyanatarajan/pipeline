@@ -48,10 +48,9 @@ jobs:
     steps:
       - name: Set up tools - kustomize
         run: |
-          KUSTOMIZE_VERSION=$(curl --silent "https://api.github.com/repos/kubernetes-sigs/kustomize/releases/latest" | jq -r .tag_name)
-          curl -Lo kustomize.tar.gz "https://github.com/kubernetes-sigs/kustomize/releases/download/${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
-          tar -xzf kustomize.tar.gz
-          sudo mv kustomize /usr/local/bin
+          kustomize version
+          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          sudo mv kustomize /usr/local/bin/
     
       - name: Checkout repository
         uses: actions/checkout@v4
