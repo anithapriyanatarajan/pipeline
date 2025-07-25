@@ -82,8 +82,10 @@ spec:
       echo ${DOCKER_CONFIG_PATH}
       ls -la ${DOCKER_CONFIG_PATH}
 
+      cat ${DOCKER_CONFIG_PATH}/.dockerconfigjson
+
       echo ${CONTAINER_REGISTRY_CREDENTIALS}
-      
+
       # Login to the container registry
       cat ${CONTAINER_REGISTRY_CREDENTIALS}
 
