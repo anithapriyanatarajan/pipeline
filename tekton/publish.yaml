@@ -79,7 +79,7 @@ spec:
       set -ex
       
       cat /workspace/release-secret/docker-config.json
-      
+
       # Login to the container registry
       DOCKER_CONFIG=$(cat ${CONTAINER_REGISTRY_CREDENTIALS} | \
         crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 2>&1 | \
@@ -91,7 +91,7 @@ spec:
         HOSTNAME=${region}.$(params.imageRegistry)
         cat ${CONTAINER_REGISTRY_CREDENTIALS} | crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin ${HOSTNAME}
       done
-      cp ${DOCKER_CONFIG} /workspace/docker-config.json
+      cp /workspace/release-secret/docker-config.json /workspace/docker-config.json
       cat /workspace/docker-config.json
 
   - name: create-ko-yaml
