@@ -66,6 +66,8 @@ spec:
         value: "$(workspaces.output.path)/$(params.versionTag)"
       - name: KO_EXTRA_ARGS
         value: "$(params.koExtraArgs)"
+      - name: DOCKER_CONFIG_PATH
+        value: "$(workspaces.release-secret.path)"
   results:
   # IMAGES result is picked up by Tekton Chains to sign the release.
   # See https://github.com/tektoncd/plumbing/blob/main/docs/signing.md for more info.
@@ -77,7 +79,11 @@ spec:
     script: |
       #!/bin/sh
       set -ex
+      echo ${DOCKER_CONFIG_PATH}
+      ls -la ${DOCKER_CONFIG_PATH}
 
+      echo ${CONTAINER_REGISTRY_CREDENTIALS}
+      
       # Login to the container registry
       cat ${CONTAINER_REGISTRY_CREDENTIALS}
 
