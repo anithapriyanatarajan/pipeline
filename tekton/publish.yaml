@@ -78,10 +78,6 @@ spec:
       #!/bin/sh
       set -ex
       
-      cat ${CONTAINER_REGISTRY_CREDENTIALS} | crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 
-
-      cat /workspace/release-secret/docker-config.json
-
       # Login to the container registry
       DOCKER_CONFIG=$(cat ${CONTAINER_REGISTRY_CREDENTIALS} | \
         crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 2>&1 | \
@@ -93,10 +89,8 @@ spec:
         HOSTNAME=${region}.$(params.imageRegistry)
         cat ${CONTAINER_REGISTRY_CREDENTIALS} | crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin ${HOSTNAME}
       done
-      
-      cp ${DOCKER_CONFIG} /workspace/docker-config.json
 
-      cat /workspace/docker-config.json
+      cp ${DOCKER_CONFIG} /workspace/docker-config.json
 
   - name: create-ko-yaml
     image: cgr.dev/chainguard/go:latest-dev@sha256:8e2632f8725d1a48d6f97a13c71e1594fe17dc9c0e7d00543091a04ac82e429b
@@ -153,6 +147,9 @@ spec:
       #!/usr/bin/env sh
       set -ex
 
+      # Fix Git ownership issue for the repository directory
+      git config --global --add safe.directory ${PROJECT_ROOT}
+
       # Use the generated `.ko.yaml`
       export KO_CONFIG_PATH=/workspace
       cat ${KO_CONFIG_PATH}/.ko.yaml
@@ -205,6 +202,7 @@ spec:
       # Rewrite "devel" to params.versionTag
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.yaml
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.notags.yaml
+      
   - name: koparse
     image: ghcr.io/tektoncd/plumbing/koparse@sha256:1898ef549aaff602d06c049136aaf1c1eacc573846c42bbf42d8dc9258235204
     script: |
