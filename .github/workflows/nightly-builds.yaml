@@ -132,15 +132,8 @@ jobs:
             --from-file=docker-config.json=/tmp/docker-config.json
           rm -f /tmp/docker-config.json
           
-          # Create container registry secret with proper Tekton annotations
-          kubectl create secret docker-registry ghcr-creds \
-            --docker-server=ghcr.io \
-            --docker-username=${{ github.actor }} \
-            --docker-password="${GHCR_TOKEN}" \
-            --docker-email=${{ github.actor }}@users.noreply.github.com
-
           # Add Tekton annotation for container registry authentication
-          kubectl annotate secret ghcr-creds \
+          kubectl annotate secret release-images-secret \
             tekton.dev/docker-0=ghcr.io
 
           # Apply service account configuration with proper RBAC
@@ -180,7 +173,7 @@ jobs:
             --param runTests="false" \
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
-            --workspace name=release-images-secret,secret=ghcr-creds \
+            --workspace name=release-images-secret,secret=release-images-secret \
             --tasks-timeout 2h \
             --pipeline-timeout 3h \
             --output name) || {

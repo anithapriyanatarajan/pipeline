@@ -5,7 +5,7 @@ metadata:
 secrets:
 - name: release-secret
 - name: git-resolver-secret
-- name: ghcr-creds
+- name: release-images-secret 
 
 ---
 
