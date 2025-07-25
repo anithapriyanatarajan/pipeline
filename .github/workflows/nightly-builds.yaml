@@ -45,13 +45,7 @@ jobs:
       packages: write
       id-token: write
 
-    steps:
-      - name: Set up tools - kustomize
-        run: |
-          kustomize version
-          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
-          sudo mv kustomize /usr/local/bin/
-    
+    steps:    
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -102,7 +96,7 @@ jobs:
           kubectl patch configmap git-resolver-config -n tekton-pipelines-resolvers --patch='
           data:
             api-token-secret-name: "git-resolver-secret"
-            api-token-secret-key: "password"
+            api-token-secret-key: "token"
           ' || true
  
           kubectl patch configmap feature-flags -n tekton-pipelines --patch='
