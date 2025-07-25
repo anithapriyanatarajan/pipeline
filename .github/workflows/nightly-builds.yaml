@@ -166,21 +166,10 @@ jobs:
           # Create a Kubernetes secret for GHCR authentication.
           # This version creates the secret with a custom key name `docker-config.json`
           # (instead of the default `.dockerconfigjson`) to match what the publish task expects.
-          echo "{\"auths\":{\"ghcr.io\":{\"auth\":\"$(echo -n \"${IMAGE_REGISTRY_USER}:${GHCR_TOKEN}\" | base64 -w 0)\"}}}" > /tmp/docker-config.json
+          echo "${GHCR_TOKEN}" > /tmp/docker-config.json
           kubectl create secret generic release-images-secret \
             --from-file=docker-config.json=/tmp/docker-config.json
           rm -f /tmp/docker-config.json
-
-
-          #kubectl create secret docker-registry release-images-secret \
-          #  --docker-server=ghcr.io \
-          #  --docker-username=${{ github.actor }} \
-          #  --docker-password="${GHCR_TOKEN}" \
-          #  --docker-email=${{ github.actor }}@users.noreply.github.com
-          
-          # Add Tekton annotation for container registry authentication
-          # kubectl annotate secret release-images-secret \
-          #  tekton.dev/docker-0=ghcr.io
 
           # Apply service account configuration with proper RBAC
           kubectl apply -f tekton/account.yaml
