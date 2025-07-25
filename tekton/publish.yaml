@@ -80,6 +80,26 @@ spec:
 
       # Login to the container registry
       cat ${CONTAINER_REGISTRY_CREDENTIALS}
+
+      if [[ ! -f "${CONTAINER_REGISTRY_CREDENTIALS}" ]]; then
+        echo "❌ Credential file not found: ${CONTAINER_REGISTRY_CREDENTIALS}"
+        exit 1
+      fi
+
+      DOCKER_CONFIG=$(crane auth login \
+        -u "${CONTAINER_REGISTRY_USER}" \
+        --password-stdin "$(params.imageRegistry)" \
+        < "${CONTAINER_REGISTRY_CREDENTIALS}" 2>&1 | \
+        sed -n 's,^.*logged in via \(.*\)$,\1,p')
+
+      if [[ -z "$DOCKER_CONFIG" ]]; then
+        echo "❌ Failed to retrieve Docker config path from crane login."
+        exit 1
+      fi
+
+      echo "✅ Logged in successfully. DOCKER_CONFIG: $DOCKER_CONFIG"
+
+
       DOCKER_CONFIG=$(cat ${CONTAINER_REGISTRY_CREDENTIALS} | \
         crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 2>&1 | \
         sed -n 's,^.*logged in via \(.*\)$,\1,p')
@@ -90,8 +110,10 @@ spec:
         HOSTNAME=${region}.$(params.imageRegistry)
         cat ${CONTAINER_REGISTRY_CREDENTIALS} | crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin ${HOSTNAME}
       done
-      echo ${DOCKER_CONFIG}
+
+      cat ${DOCKER_CONFIG}
       cp ${DOCKER_CONFIG} /workspace/docker-config.json
+
       cat /workspace/docker-config.json
 
   - name: create-ko-yaml
