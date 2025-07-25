@@ -180,7 +180,7 @@ jobs:
           
           # Add Tekton annotation for container registry authentication
           # kubectl annotate secret release-images-secret \
-            tekton.dev/docker-0=ghcr.io
+          #  tekton.dev/docker-0=ghcr.io
 
           # Apply service account configuration with proper RBAC
           kubectl apply -f tekton/account.yaml
