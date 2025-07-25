@@ -88,6 +88,11 @@ spec:
         cat "${CONTAINER_REGISTRY_CREDENTIALS}"
       else
         echo "no file"
+        echo "workspace path contains ..."
+        ls -la /workspace
+
+        echo "workspace release-secret contains ..."
+        ls -la /workspace/release-secret
       fi
 
       if [[ ! -f "${CONTAINER_REGISTRY_CREDENTIALS}" ]]; then
