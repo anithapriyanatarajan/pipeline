@@ -1,4 +1,4 @@
-apiVersion: tekton.dev/v1
+apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: publish-release
@@ -16,15 +16,15 @@ spec:
       description: Extra args to be passed to ko
       default: "--preserve-import-paths"
     - name: versionTag
-      description: Version tag (X.Y.Z for stable, vYYYYMMDD-abc1234 for nightly)
+      description: The version, vX.Y.Z for stable, vYYYYMMDD-abc1234 for nightly that the artifacts should be tagged with (including `v`).
     - name: imageRegistry
       description: The target image registry
-      default: ghcr.io
+      default: gcr.io
     - name: imageRegistryPath
       description: The path (project) in the image registry
     - name: imageRegistryRegions
       description: The target image registry regions
-      default: ""
+      default: "us eu asia"
     - name: imageRegistryUser
       description: Username to be used to login to the container registry
       default: "_json_key"
@@ -66,8 +66,6 @@ spec:
         value: "$(workspaces.output.path)/$(params.versionTag)"
       - name: KO_EXTRA_ARGS
         value: "$(params.koExtraArgs)"
-      - name: DOCKER_CONFIG_PATH
-        value: "$(workspaces.release-secret.path)"
   results:
   # IMAGES result is picked up by Tekton Chains to sign the release.
   # See https://github.com/tektoncd/plumbing/blob/main/docs/signing.md for more info.
@@ -75,58 +73,25 @@ spec:
   steps:
 
   - name: container-registry-auth
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:68d9b984ee9cb5ff9cf7a779e8bdf3c2022f9042abfa1f0f5727a082a9429535
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:430c7813147443b59185d79ce7f5d682698a9fc3072f100850dc3a04100c1d91
     script: |
       #!/bin/sh
       set -ex
 
-      # For GHCR (GitHub Container Registry), handle authentication differently
-      if [[ "$(params.imageRegistry)" == "ghcr.io" ]]; then
-        echo "🔍 Configuring authentication for GitHub Container Registry"
+      # Login to the container registry
+      DOCKER_CONFIG=$(cat ${CONTAINER_REGISTRY_CREDENTIALS} | \
+        crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 2>&1 | \
+        sed -n 's,^.*logged in via \(.*\)$,\1,p')
 
-        # For GHCR with Docker registry secrets, the secret structure is different
-        # Check if we have a .dockerconfigjson file (from kubectl create secret docker-registry)
-        if [[ -f "$(workspaces.release-secret.path)/.dockerconfigjson" ]]; then
-          echo "Using Docker registry secret format"
-          cp "$(workspaces.release-secret.path)/.dockerconfigjson" /workspace/docker-config.json
-        elif [[ -f "${CONTAINER_REGISTRY_CREDENTIALS}" ]]; then
-          # Check if it's a docker config.json or a simple token
-          if cat ${CONTAINER_REGISTRY_CREDENTIALS} | jq -r '.auths // empty' >/dev/null 2>&1; then
-            # It's a docker config.json, copy it directly
-            echo "Using docker config.json format"
-            cp ${CONTAINER_REGISTRY_CREDENTIALS} /workspace/docker-config.json
-          else
-            # It's a simple token, create docker config
-            echo "Using token-based authentication"
-            TOKEN=$(cat ${CONTAINER_REGISTRY_CREDENTIALS})
+      # Auth with account credentials for all regions.
+      for region in ${REGIONS}
+      do
+        HOSTNAME=${region}.$(params.imageRegistry)
+        cat ${CONTAINER_REGISTRY_CREDENTIALS} | crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin ${HOSTNAME}
+      done
+      cp ${DOCKER_CONFIG} /workspace/docker-config.json
+      cat /workspace/docker-config.json
 
-            # Create docker config for GHCR
-            mkdir -p ~/.docker
-            echo '{"auths":{"ghcr.io":{"auth":"'$(echo -n "${CONTAINER_REGISTRY_USER}:${TOKEN}" | base64 -w 0)'"}}}' > ~/.docker/config.json
-            cp ~/.docker/config.json /workspace/docker-config.json
-          fi
-        else
-          echo "Credentials file not found: ${CONTAINER_REGISTRY_CREDENTIALS}"
-          exit 1
-        fi
-      else
-        # Original GCR authentication logic
-        echo "🔍 Configuring authentication for GCR/other registries"
-
-        # Login to the container registry
-        DOCKER_CONFIG=$(cat ${CONTAINER_REGISTRY_CREDENTIALS} | \
-          crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 2>&1 | \
-          sed -n 's,^.*logged in via \(.*\)$,\1,p')
-
-        # Auth with account credentials for all regions.
-        for region in ${REGIONS}
-        do
-          HOSTNAME=${region}.$(params.imageRegistry)
-          cat ${CONTAINER_REGISTRY_CREDENTIALS} | crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin ${HOSTNAME}
-        done
-        cp ${DOCKER_CONFIG} /workspace/docker-config.json
-      fi
-      
   - name: create-ko-yaml
     image: cgr.dev/chainguard/go:latest-dev@sha256:8e2632f8725d1a48d6f97a13c71e1594fe17dc9c0e7d00543091a04ac82e429b
     script: |
@@ -181,9 +146,6 @@ spec:
     script: |
       #!/usr/bin/env sh
       set -ex
-      
-      # Fix Git ownership issue for the repository directory
-      git config --global --add safe.directory ${PROJECT_ROOT}
 
       # Use the generated `.ko.yaml`
       export KO_CONFIG_PATH=/workspace
@@ -262,8 +224,6 @@ spec:
       do
         IMAGES="${IMAGES} $(params.package)/cmd/${cmd}:$(params.versionTag)"
       done
-      
-      koparse --help 
 
       # Parse the built images from the release.yaml generated by ko
       koparse \
