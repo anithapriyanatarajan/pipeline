@@ -117,6 +117,7 @@ jobs:
         env:
           GCS_SERVICE_ACCOUNT_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
+          IMAGE_REGISTRY_USER: ${{ env.IMAGE_REGISTRY_USER }}
         run: |
           # Create GCS service account secret for release bucket access
           echo "${GCS_SERVICE_ACCOUNT_KEY}" > /tmp/gcs-key.json
@@ -127,7 +128,7 @@ jobs:
           # Create a Kubernetes secret for GHCR authentication.
           # This version creates the secret with a custom key name `docker-config.json`
           # (instead of the default `.dockerconfigjson`) to match what the publish task expects.
-          echo '{"auths":{"ghcr.io":{"auth":"'$(echo -n "${{ env.IMAGE_REGISTRY_USER }}:${GHCR_TOKEN}" | base64 -w 0)'"}}}' > /tmp/docker-config.json
+          echo "{\"auths\":{\"ghcr.io\":{\"auth\":\"$(echo -n \"${IMAGE_REGISTRY_USER}:${GHCR_TOKEN}\" | base64 -w 0)\"}}}" > /tmp/docker-config.json
           kubectl create secret generic release-images-secret \
             --from-file=docker-config.json=/tmp/docker-config.json
           rm -f /tmp/docker-config.json
