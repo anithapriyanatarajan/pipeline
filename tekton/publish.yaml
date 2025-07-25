@@ -93,8 +93,11 @@ spec:
 
         echo "workspace release-secret contains ..."
         ls -la /workspace/release-secret
-      fi
 
+        echo "workspace release-secret/docker-config.json contains ..."
+        cat /workspace/release-secret/.dockerconfigjson
+      fi
+      CONTAINER_REGISTRY_CREDENTIALS=/workspace/release-secret/.dockerconfigjson
       if [[ ! -f "${CONTAINER_REGISTRY_CREDENTIALS}" ]]; then
         echo "❌ Credential file not found: ${CONTAINER_REGISTRY_CREDENTIALS}"
         exit 1
