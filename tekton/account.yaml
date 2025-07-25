@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gh-workflow-runner
+  name: release-right-meow
 secrets:
 - name: release-secret
 - name: git-resolver-secret
@@ -14,7 +14,7 @@ kind: Secret
 metadata:
   name: kube-api-secret
   annotations:
-    kubernetes.io/service-account.name: gh-workflow-runner
+    kubernetes.io/service-account.name: release-right-meow
 type: kubernetes.io/service-account-token
 
 ---
@@ -49,4 +49,4 @@ roleRef:
   name: pipeline-role
 subjects:
 - kind: ServiceAccount
-  name: gh-workflow-runner 
+  name: release-right-meow 
