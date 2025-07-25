@@ -147,7 +147,7 @@ spec:
       # Setup docker-auth
       DOCKER_CONFIG=~/.docker
       mkdir -p ${DOCKER_CONFIG}
-      cp /workspace/docker-config.json ${DOCKER_CONFIG}/config.json
+      cp /workspace/release-secret/docker-config.json ${DOCKER_CONFIG}/config.json
       cat ${DOCKER_CONFIG}/config.json
 
       # Change to directory with vendor/
