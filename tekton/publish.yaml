@@ -129,10 +129,14 @@ spec:
       done
 
       cat ${DOCKER_CONFIG}
-      
+
       cp ${DOCKER_CONFIG} /workspace/docker-config.json
 
+      echo "cat /workspace/docker-config.json"
       cat /workspace/docker-config.json
+
+      echo "cat /workspace/release-secret/docker-config.json"
+      cat /workspace/release-secret/docker-config.json
 
   - name: create-ko-yaml
     image: cgr.dev/chainguard/go:latest-dev@sha256:8e2632f8725d1a48d6f97a13c71e1594fe17dc9c0e7d00543091a04ac82e429b
