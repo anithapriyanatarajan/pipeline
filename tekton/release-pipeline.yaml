@@ -8,6 +8,12 @@ spec:
     - name: package
       description: package to release
       default: github.com/tektoncd/pipeline
+    - name: org
+      description: organization that has the package to release
+      default: tektoncd
+    - name: repo
+      description: repo that has the package to release
+      default: pipeline
     - name: gitRevision
       description: the git revision to release
     - name: imageRegistry
@@ -166,7 +172,7 @@ spec:
           - name: repo
             value: pipeline
           - name: org
-            value: tektoncd
+            value: anithapriyanatarajan #tektoncd
           - name: revision
             value: $(params.gitRevision)
           - name: pathInRepo
