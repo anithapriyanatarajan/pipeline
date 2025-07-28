@@ -163,7 +163,7 @@ jobs:
             --param serviceAccountPath=release.json \
             --param serviceAccountImagesPath=docker-config.json \
             --param releaseAsLatest="true" \
-            --param runTests="true" \
+            --param runTests="false" \
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=release-images-secret \

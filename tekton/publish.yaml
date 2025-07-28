@@ -205,7 +205,7 @@ spec:
   - name: koparse
     image: ghcr.io/tektoncd/plumbing/koparse@sha256:1898ef549aaff602d06c049136aaf1c1eacc573846c42bbf42d8dc9258235204
     script: |
-      #!/usr/bin/env bash
+      #!/usr/bin/env sh
       set -ex
 
       IMAGES=""
