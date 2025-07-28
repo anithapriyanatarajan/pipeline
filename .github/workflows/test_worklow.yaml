@@ -12,7 +12,7 @@ env:
   REGISTRY: ghcr.io
   PACKAGE: github.com/${{ github.repository }}
   ORG: ${{ github.repository_owner }}
-  PROJECT: ${ github.event.repository.name }
+  PROJECT: ${{ github.event.repository.name }}
   IMAGE_REGISTRY_PATH: ${{ github.repository }}
   IMAGE_REGISTRY_USER: ${{ github.actor }}
 
