@@ -29,8 +29,6 @@ jobs:
     steps:
       - name: Run PR CI
         run: |
-            #!/bin/bash
-            set -euo pipefail  # Exit on any error, undefined variables, or pipe failures
             echo "Running PR CI"
             echo "Package: ${{ env.PACKAGE }}"
             echo "Org: ${{ env.ORG }}"
