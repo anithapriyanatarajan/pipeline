@@ -21,17 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run normal CI
-        run: echo "Running normal CI"
-
-  pull_request_ci:
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' }}
-    steps:
-      - name: Run PR CI
         run: |
-            echo "Running PR CI"
-            echo "Package: ${{ env.PACKAGE }}"
-            echo "Org: ${{ env.ORG }}"
-            echo "Project: ${{ env.PROJECT }}"
-            echo "Image Registry Path: ${{ env.IMAGE_REGISTRY_PATH }}"
-            echo "Image Registry User: ${{ env.IMAGE_REGISTRY_USER }}"
+          echo "Running normal CI"
+          echo "Package: ${{ env.PACKAGE }}"
+          echo "Registry: ${{ env.REGISTRY }}"
+          echo "Org: ${{ env.ORG }}"
+          echo "Project: ${{ env.PROJECT }}"
+          echo "Image Registry Path: ${{ env.IMAGE_REGISTRY_PATH }}"
+          echo "Image Registry User: ${{ env.IMAGE_REGISTRY_USER }}"
