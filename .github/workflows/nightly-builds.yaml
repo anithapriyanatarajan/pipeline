@@ -3,7 +3,7 @@ name: Tekton Nightly Build
 on:
   push:
     branches:
-      - test-the-pr
+      - test-the-pr1
   schedule:
     # Run at 03:00 UTC daily
     - cron: "0 3 * * *"
@@ -23,6 +23,8 @@ env:
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   REGISTRY: ghcr.io
   PACKAGE: github.com/${{ github.repository }}
+  ORG: ${{ github.repository_owner }}
+  PROJECT: ${ github.event.repository.name }
   BUCKET: ${{ inputs.nightly_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
   IMAGE_REGISTRY_PATH: ${{ github.repository }}
   IMAGE_REGISTRY_USER: ${{ github.actor }}
