@@ -170,9 +170,9 @@ spec:
         resolver: git
         params:
           - name: repo
-            value: pipeline
+            value: $(params.repo) #pipeline
           - name: org
-            value: anithapriyanatarajan #tektoncd
+            value: $(params.org) #tektoncd
           - name: revision
             value: $(params.gitRevision)
           - name: pathInRepo
