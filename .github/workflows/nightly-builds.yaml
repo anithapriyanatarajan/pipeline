@@ -22,7 +22,8 @@ on:
 env:
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
   REGISTRY: ghcr.io
-  PACKAGE: github.com/${{ github.repository }}
+  PACKAGE: github.com/tektoncd/pipeline
+  #PACKAGE: github.com/${{ github.repository }}
   ORG: ${{ github.repository_owner }}
   PROJECT: ${{ github.event.repository.name }}
   BUCKET: ${{ inputs.nightly_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
