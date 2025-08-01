@@ -5,7 +5,7 @@ on:
     branches: [ "replace-action-from-allowed-list" ]
 
 env:
-  KUBERNETES_VERSION: 'v1.33.0'
+  KUBERNETES_VERSION: 'v1.33.x'
 
 jobs:
   build:
