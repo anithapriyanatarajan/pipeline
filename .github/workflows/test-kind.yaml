@@ -19,7 +19,8 @@ jobs:
 
     steps:
       - name: Set up Kind cluster
-        uses: chainguard-dev/actions/setup-kind@ae2f0393ff2a60c572ff4d3485f406e8f36dfd38 # v1.4.6
+        #uses: chainguard-dev/actions/setup-kind@ae2f0393ff2a60c572ff4d3485f406e8f36dfd38 # v1.4.6
+        uses: chainguard-dev/actions/setup-kind@v1.4.6
         with:
           k8s-version: ${{ env.KUBERNETES_VERSION }}
           #kind-version: 0.29.0
