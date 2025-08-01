@@ -12,7 +12,7 @@ on:
       kubernetes_version:
         description: 'Kubernetes version to test with'
         required: false
-        default: 'v1.33.0'
+        default: 'v1.33.x'
       nightly_bucket:
         description: 'Nightly bucket for builds'
         required: false
@@ -20,7 +20,7 @@ on:
         type: string
 
 env:
-  KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
+  KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.x' }}
   REGISTRY: ghcr.io
   PACKAGE: github.com/tektoncd/pipeline
   BUCKET: ${{ inputs.nightly_bucket || 'gs://anitha-tekton-nightly-test/pipeline' }}
@@ -29,7 +29,7 @@ env:
 
 jobs:
   build:
-    name: Nightly Build (K8s ${{ inputs.kubernetes_version || 'v1.33.0' }})
+    name: Nightly Build (K8s ${{ inputs.kubernetes_version || 'v1.33.x' }})
     runs-on: ubuntu-latest
 
     permissions:
