@@ -1,0 +1,35 @@
+name: Tekton Nightly Build
+
+on:
+  push:
+    branches: [ "replace-action-from-allowed-list" ]
+
+env:
+  KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
+
+jobs:
+  build:
+    name: Spin up kind  (K8s ${{ inputs.kubernetes_version || 'v1.33.0' }})
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Set up Kind cluster
+        uses: chainguard-dev/actions/setup-kind@ae2f0393ff2a60c572ff4d3485f406e8f36dfd38 # v1.4.6
+        with:
+          k8s-version: ${{ env.KUBERNETES_VERSION }}
+          #kind-version: 0.29.0
+          #registry-authority: registry.local:5000
+          #registry-mirror: mirror.gcr.io
+          #cluster-suffix: cluster.local
+
+      - name: Set up Tekton
+        uses: tektoncd/actions/setup-tektoncd@main
+        with:
+          pipeline_version: latest
+          setup_registry: "true"
+          patch_etc_hosts: "true"

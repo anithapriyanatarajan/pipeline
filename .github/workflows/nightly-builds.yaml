@@ -49,10 +49,13 @@ jobs:
           echo "latest_sha=${latest_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Kind cluster
-        uses: helm/kind-action@v1.8.0
+        uses: chainguard-dev/actions/setup-kind@ae2f0393ff2a60c572ff4d3485f406e8f36dfd38 # v1.4.6
         with:
-          node_image: kindest/node:${{ env.KUBERNETES_VERSION }}
-          cluster_name: tekton-nightly
+          k8s-version: ${{ env.KUBERNETES_VERSION }}
+          kind-version: 0.29.0
+          registry-authority: registry.local:5000
+          registry-mirror: mirror.gcr.io
+          cluster-suffix: cluster.local
 
       - name: Set up Tekton
         uses: tektoncd/actions/setup-tektoncd@main
