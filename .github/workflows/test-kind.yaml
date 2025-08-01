@@ -5,11 +5,11 @@ on:
     branches: [ "replace-action-from-allowed-list" ]
 
 env:
-  KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
+  KUBERNETES_VERSION: 'v1.33.0'
 
 jobs:
   build:
-    name: Spin up kind  (K8s ${{ inputs.kubernetes_version || 'v1.33.0' }})
+    name: Spin up kind
     runs-on: ubuntu-latest
 
     permissions:
