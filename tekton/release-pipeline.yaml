@@ -161,10 +161,8 @@ spec:
       taskRef:
         resolver: git
         params:
-          - name: repo
-            value: pipeline
-          - name: org
-            value: tektoncd
+          - name: url
+            value: https://github.com/$(params.package)
           - name: revision
             value: $(params.gitRevision)
           - name: pathInRepo
