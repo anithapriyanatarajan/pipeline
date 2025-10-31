@@ -221,7 +221,7 @@ spec:
         - name: bucketName
           value: $(params.releaseBucket)
         - name: objectPrefix
-          value: previous/$(params.versionTag)
+          value: previous/$(params.versionTag)/
         - name: replaceExistingFiles
           value: "true"
         - name: recursive
@@ -253,7 +253,7 @@ spec:
         - name: bucketName
           value: $(params.releaseBucket)
         - name: objectPrefix
-          value: latest
+          value: latest/
         - name: replaceExistingFiles
           value: "true"
         - name: recursive
