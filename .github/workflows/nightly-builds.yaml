@@ -27,7 +27,7 @@ on:
 env:
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.x' }}
   REGISTRY: ghcr.io
-  PACKAGE: github.com/${{ github.repository }}
+  PACKAGE: github.com/tektoncd
   BUCKET: ${{ inputs.nightly_bucket || 'bucket-20251015-1602' }}
   IMAGE_REGISTRY_PATH: ${{ github.repository }}
   IMAGE_REGISTRY_USER: tekton-robot
