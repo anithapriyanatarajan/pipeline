@@ -42,8 +42,6 @@ spec:
     - name: koExtraArgs
       description: Extra args to be passed to ko
       default: "--preserve-import-paths"
-    - name: serviceAccountPath
-      description: The path to the service account file within the release-secret workspace
     - name: serviceAccountImagesPath
       description: The path to the service account file or credentials within the release-images-secret workspace
     - name: runTests
@@ -208,9 +206,9 @@ spec:
         resolver: bundles
         params:
           - name: bundle
-            value: ghcr.io/tektoncd/catalog/upstream/tasks/gcs-upload:0.3
+            value: ghcr.io/tektoncd/catalog/upstream/tasks/oracle-cloud-storage-upload:0.1
           - name: name
-            value: gcs-upload
+            value: oracle-cloud-storage-upload
           - name: kind
             value: task
       workspaces:
@@ -220,12 +218,16 @@ spec:
           workspace: workarea
           subPath: bucket
       params:
-        - name: location
-          value: $(params.releaseBucket)/previous/$(params.versionTag)
         - name: path
           value: $(params.versionTag)
-        - name: serviceAccountPath
-          value: $(params.serviceAccountPath)
+        - name: bucketName
+          value: $(params.releaseBucket)
+        - name: objectPrefix
+          value: previous/$(params.versionTag)
+        - name: replaceExistingFiles
+          value: "true"
+        - name: recursive
+          value: "true"
     - name: publish-to-bucket-latest
       runAfter: [publish-images]
       when:
@@ -236,9 +238,9 @@ spec:
         resolver: bundles
         params:
           - name: bundle
-            value: ghcr.io/tektoncd/catalog/upstream/tasks/gcs-upload:0.3
+            value: ghcr.io/tektoncd/catalog/upstream/tasks/oracle-cloud-storage-upload:0.1
           - name: name
-            value: gcs-upload
+            value: oracle-cloud-storage-upload
           - name: kind
             value: task
       workspaces:
@@ -248,14 +250,18 @@ spec:
           workspace: workarea
           subPath: bucket
       params:
-        - name: location
-          value: $(params.releaseBucket)/latest
         - name: path
           value: $(params.versionTag)
-        - name: serviceAccountPath
-          value: $(params.serviceAccountPath)
+        - name: bucketName
+          value: $(params.releaseBucket)
+        - name: objectPrefix
+          value: latest
+        - name: replaceExistingFiles
+          value: "true"
+        - name: recursive
+          value: "true"
         - name: deleteExtraFiles
-          value: "true" # Uses rsync to copy content into latest
+          value: "true" # Uses sync to copy content into latest
     - name: report-bucket
       runAfter: [publish-to-bucket]
       params:
@@ -284,5 +290,9 @@ spec:
               BASE_URL=$(echo "${RELEASE_BUCKET}/previous/${VERSION_TAG}")
               # If the bucket is in the gs:// return the corresponding public https URL
               BASE_URL=$(echo ${BASE_URL} | sed 's,gs://,https://storage.googleapis.com/,g')
+              # If the bucket is an Oracle Cloud bucket name, construct the OCI Object Storage URL
+              # Format: https://objectstorage.<region>.oraclecloud.com/n/<namespace>/b/<bucket>/o/
+              # Since we don't have region/namespace in params, we'll return the bucket path as-is
+              # The actual URL construction will need to be done by the consumer with proper credentials
               echo "${BASE_URL}/release.yaml" > $(results.release.path)
               echo "${BASE_URL}/release.notag.yaml" > $(results.release-no-tag.path)
