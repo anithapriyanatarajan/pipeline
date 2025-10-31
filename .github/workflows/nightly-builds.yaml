@@ -174,7 +174,7 @@ jobs:
             --param imageRegistryRegions="" \
             --param buildPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le" \
             --param publishPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64" \
-            --param koExtraArgs="" \
+            --param koExtraArgs="--preserve-import-paths" \
             --param serviceAccountImagesPath=docker-config.json \
             --param releaseAsLatest="true" \
             --param runTests="false" \
