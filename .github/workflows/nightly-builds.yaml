@@ -26,7 +26,7 @@ on:
 
 env:
   KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.x' }}
-  REGISTRY: ghcr.io
+  REGISTRY: ghcr.io #test
   PACKAGE: github.com/${{ github.repository }}
   BUCKET: ${{ inputs.nightly_bucket || 'bucket-20251015-1602' }}
   IMAGE_REGISTRY_PATH: ${{ github.repository }}
