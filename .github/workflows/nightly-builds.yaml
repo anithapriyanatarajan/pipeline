@@ -10,7 +10,7 @@ on:
       - 'tekton/release-pipeline.yaml'
       - 'tekton/publish.yaml'
   schedule:
-    # Run at 03:00 UTC daily
+    # Run at 03:00 UTC daily #
     - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
@@ -21,7 +21,7 @@ on:
       nightly_bucket:
         description: 'Oracle Cloud bucket name for builds'
         required: false
-        default: 'bucket-20251015-1602'
+        default: 'bucket-20251015-1602' 
         type: string
 
 env:
