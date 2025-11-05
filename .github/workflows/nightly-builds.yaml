@@ -72,27 +72,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
-          # Create Git authentication secret as basic-auth type for Git resolver
+          # Create Git authentication secret for Git resolver
           kubectl create secret generic git-resolver-secret \
-            --type=kubernetes.io/basic-auth \
-            --from-literal=username=git \
-            --from-literal=password="${GITHUB_TOKEN}" \
+            --from-literal=token="${GITHUB_TOKEN}" \
             -n tekton-pipelines-resolvers || true
-
-          kubectl annotate secret git-resolver-secret \
-            tekton.dev/git-0=github.com \
-            -n tekton-pipelines-resolvers --overwrite || true
 
           # Configure Git resolver to use the secret
           kubectl patch configmap git-resolver-config -n tekton-pipelines-resolvers --type=merge --patch='
           data:
             default-url: "https://github.com"
+            default-org: "tektoncd"
+            default-revision: "main"
             fetch-timeout: "1m"
             scm-type: "github"
             server-url: "https://api.github.com"
             api-token-secret-name: "git-resolver-secret"
-            api-token-secret-key: "password"
-            api-token-secret-namespace: "tekton-pipelines-resolvers"
+            api-token-secret-key: "token"
           ' || true
 
           kubectl patch configmap feature-flags -n tekton-pipelines --patch='
