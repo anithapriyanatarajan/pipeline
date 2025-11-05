@@ -156,6 +156,29 @@ jobs:
 
           echo "Starting Tekton pipeline..."
 
+          tkn pipeline start pipeline-release \
+            --serviceaccount=release-right-meow \
+            --param package="${{ env.PACKAGE }}" \
+            --param repoName="${{ env.REPO_NAME }}" \
+            --param gitRevision="${{ steps.version.outputs.latest_sha }}" \
+            --param versionTag="${{ steps.version.outputs.version_tag }}" \
+            --param releaseBucket="${{ env.BUCKET }}" \
+            --param imageRegistry=${{ env.REGISTRY }} \
+            --param imageRegistryPath="${{ env.IMAGE_REGISTRY_PATH }}" \
+            --param imageRegistryUser="${{ env.IMAGE_REGISTRY_USER }}" \
+            --param imageRegistryRegions="" \
+            --param buildPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le" \
+            --param publishPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64" \
+            --param koExtraArgs="" \
+            --param serviceAccountImagesPath=docker-config.json \
+            --param releaseAsLatest="true" \
+            --param runTests="false" \
+            --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
+            --workspace name=release-secret,secret=release-secret \
+            --workspace name=release-images-secret,secret=release-images-secret \
+            --tasks-timeout 2h \
+            --pipeline-timeout 3h 
+
           PIPELINE_RUN=$(tkn pipeline start pipeline-release \
             --serviceaccount=release-right-meow \
             --param package="${{ env.PACKAGE }}" \
