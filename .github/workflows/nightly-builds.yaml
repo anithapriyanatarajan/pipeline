@@ -1,6 +1,9 @@
 name: Tekton Nightly Build
 
-"on":
+on:
+  push:
+    branches:
+      - fix-failing-cli-action
   schedule:
     # Run at 03:00 UTC daily
     - cron: "0 3 * * *"
@@ -29,7 +32,7 @@ jobs:
   build:
     name: Nightly Build (K8s ${{ inputs.kubernetes_version || 'v1.33.x' }})
     runs-on: ubuntu-latest
-    if: github.repository_owner == 'tektoncd'  # do not run this elsewhere
+    #if: github.repository_owner == 'tektoncd'  # do not run this elsewhere
 
     permissions:
       contents: read
@@ -56,11 +59,14 @@ jobs:
           k8s-version: ${{ env.KUBERNETES_VERSION }}
 
       - name: Set up Tekton
-        uses: tektoncd/actions/setup-tektoncd@0986bcdfbaf4f83a8a7b19bc2fa360c44ee55929  # main
+        uses: tektoncd/actions/setup-tektoncd@dd92514472167b361de1c95fd31fc2ef83c282ec  # main
         with:
           pipeline_version: latest
           setup_registry: "true"
           patch_etc_hosts: "true"
+
+      - name: Verify cli version
+        run: tkn version
 
       - name: Configure Tekton Git Resolver
         env:
@@ -93,11 +99,6 @@ jobs:
           data:
             enable-cel-in-whenexpression: "true"
           ' || true
-
-      - name: Install tkn CLI
-        uses: tektoncd/actions/setup-tektoncd-cli@0986bcdfbaf4f83a8a7b19bc2fa360c44ee55929  # main
-        with:
-          version: latest
 
       - name: Apply Build Pipeline Definition
         run: |
