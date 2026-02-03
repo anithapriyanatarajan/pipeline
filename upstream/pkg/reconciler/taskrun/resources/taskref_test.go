@@ -82,6 +82,20 @@ var (
 			}},
 		},
 	}
+	simpleClusterTask = &v1beta1.ClusterTask{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "simple",
+		},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "tekton.dev/v1beta1",
+			Kind:       "ClusterTask",
+		},
+		Spec: v1beta1.TaskSpec{
+			Steps: []v1beta1.Step{{
+				Image: "something",
+			}},
+		},
+	}
 	sampleRefSource = &v1.RefSource{
 		URI: "abc.com",
 		Digest: map[string]string{
@@ -211,6 +225,48 @@ func TestLocalTaskRef(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name:      "local-clustertask",
+			namespace: "default",
+			tasks: []runtime.Object{
+				&v1beta1.ClusterTask{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster-task",
+						Annotations: map[string]string{
+							"foo": "bar",
+						},
+						Labels: map[string]string{
+							"foo": "bar",
+						},
+					},
+				},
+				&v1beta1.ClusterTask{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "sample-task",
+					},
+				},
+			},
+			ref: &v1.TaskRef{
+				Name: "cluster-task",
+				Kind: "ClusterTask",
+			},
+			expected: &v1.Task{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "tekton.dev/v1",
+					Kind:       "Task",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster-task",
+					Annotations: map[string]string{
+						"foo": "bar",
+					},
+					Labels: map[string]string{
+						"foo": "bar",
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
 			name:      "task-not-found",
 			namespace: "default",
 			tasks:     []runtime.Object{},
@@ -219,6 +275,17 @@ func TestLocalTaskRef(t *testing.T) {
 			},
 			expected: nil,
 			wantErr:  errors.New(`tasks.tekton.dev "simple" not found`),
+		},
+		{
+			name:      "clustertask-not-found",
+			namespace: "default",
+			tasks:     []runtime.Object{},
+			ref: &v1.TaskRef{
+				Name: "cluster-task",
+				Kind: "ClusterTask",
+			},
+			expected: nil,
+			wantErr:  errors.New(`clustertasks.tekton.dev "cluster-task" not found`),
 		},
 		{
 			name:      "local-task-missing-namespace",
@@ -240,7 +307,7 @@ func TestLocalTaskRef(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			tektonclient := fake.NewSimpleClientset(tc.tasks...)
@@ -610,7 +677,7 @@ func TestStepActionRef(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			tektonclient := fake.NewSimpleClientset(tc.stepactions...)
@@ -673,7 +740,7 @@ func TestStepActionRef_Error(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			tektonclient := fake.NewSimpleClientset(tc.stepactions...)
@@ -695,7 +762,7 @@ func TestStepActionRef_Error(t *testing.T) {
 }
 
 func TestGetTaskFunc_Local(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 
 	testcases := []struct {
 		name         string
@@ -732,6 +799,38 @@ func TestGetTaskFunc_Local(t *testing.T) {
 				Name: "simple",
 			},
 			expected:     simpleNamespacedTask,
+			expectedKind: v1.NamespacedTaskKind,
+		}, {
+			name:       "local-cluster-task",
+			localTasks: []runtime.Object{simpleClusterTask},
+			remoteTasks: []runtime.Object{
+				&v1beta1.ClusterTask{
+					TypeMeta:   metav1.TypeMeta{APIVersion: "tekton.dev/v1alpha1", Kind: "ClusterTask"},
+					ObjectMeta: metav1.ObjectMeta{Name: "simple"},
+				},
+				&v1beta1.ClusterTask{
+					TypeMeta:   metav1.TypeMeta{APIVersion: "tekton.dev/v1alpha1", Kind: "ClusterTask"},
+					ObjectMeta: metav1.ObjectMeta{Name: "sample"},
+				},
+			},
+			ref: &v1.TaskRef{
+				Name: "simple",
+				Kind: v1.ClusterTaskRefKind,
+			},
+			expected: &v1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "simple",
+				},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "tekton.dev/v1",
+					Kind:       "Task",
+				},
+				Spec: v1.TaskSpec{
+					Steps: []v1.Step{{
+						Image: "something",
+					}},
+				},
+			},
 			expectedKind: v1.NamespacedTaskKind,
 		},
 	}
@@ -772,7 +871,7 @@ func TestGetTaskFunc_Local(t *testing.T) {
 }
 
 func TestGetStepActionFunc_Local(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 
 	testcases := []struct {
 		name             string
@@ -825,7 +924,7 @@ func TestGetStepActionFunc_Local(t *testing.T) {
 }
 
 func TestGetStepActionFunc_RemoteResolution_Success(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	stepRef := &v1.Ref{ResolverRef: v1.ResolverRef{Resolver: "git"}}
 
 	testcases := []struct {
@@ -891,7 +990,7 @@ func TestGetStepActionFunc_RemoteResolution_Success(t *testing.T) {
 }
 
 func TestGetStepActionFunc_RemoteResolution_Error(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	stepRef := &v1.Ref{ResolverRef: v1.ResolverRef{Resolver: "git"}}
 
 	testcases := []struct {
@@ -936,7 +1035,7 @@ func TestGetStepActionFunc_RemoteResolution_Error(t *testing.T) {
 }
 
 func TestGetTaskFuncFromTaskRunSpecAlreadyFetched(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	tektonclient := fake.NewSimpleClientset(simpleNamespacedTask)
@@ -1000,7 +1099,7 @@ echo hello
 }
 
 func TestGetTaskFunc_RemoteResolution(t *testing.T) {
-	ctx := cfgtesting.EnableStableAPIFields(t.Context())
+	ctx := cfgtesting.EnableStableAPIFields(context.Background())
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
 	taskRef := &v1.TaskRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
@@ -1014,6 +1113,14 @@ func TestGetTaskFunc_RemoteResolution(t *testing.T) {
 		name: "v1beta1 task",
 		taskYAML: strings.Join([]string{
 			"kind: Task",
+			"apiVersion: tekton.dev/v1beta1",
+			taskYAMLString,
+		}, "\n"),
+		wantTask: parse.MustParseV1TaskAndSetDefaults(t, taskYAMLString),
+	}, {
+		name: "v1beta1 cluster task",
+		taskYAML: strings.Join([]string{
+			"kind: ClusterTask",
 			"apiVersion: tekton.dev/v1beta1",
 			taskYAMLString,
 		}, "\n"),
@@ -1072,7 +1179,7 @@ func TestGetTaskFunc_RemoteResolution(t *testing.T) {
 }
 
 func TestGetTaskFunc_RemoteResolution_ValidationFailure(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
 	taskRef := &v1.TaskRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
@@ -1084,6 +1191,13 @@ func TestGetTaskFunc_RemoteResolution_ValidationFailure(t *testing.T) {
 		name: "invalid v1beta1 task",
 		taskYAML: strings.Join([]string{
 			"kind: Task",
+			"apiVersion: tekton.dev/v1beta1",
+			taskYAMLString,
+		}, "\n"),
+	}, {
+		name: "invalid v1beta1 clustertask",
+		taskYAML: strings.Join([]string{
+			"kind: ClusterTask",
 			"apiVersion: tekton.dev/v1beta1",
 			taskYAMLString,
 		}, "\n"),
@@ -1126,7 +1240,7 @@ func TestGetTaskFunc_RemoteResolution_ValidationFailure(t *testing.T) {
 }
 
 func TestGetTaskFunc_RemoteResolution_ReplacedParams(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
 	task := parse.MustParseV1TaskAndSetDefaults(t, taskYAMLString)
@@ -1234,7 +1348,7 @@ func TestGetTaskFunc_RemoteResolution_ReplacedParams(t *testing.T) {
 }
 
 func TestGetPipelineFunc_RemoteResolutionInvalidData(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
 	taskRef := &v1.TaskRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
@@ -1255,7 +1369,7 @@ func TestGetPipelineFunc_RemoteResolutionInvalidData(t *testing.T) {
 }
 
 func TestGetTaskFunc_V1beta1Task_VerifyNoError(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 	tektonclient := fake.NewSimpleClientset()
 
@@ -1359,7 +1473,7 @@ func TestGetTaskFunc_V1beta1Task_VerifyNoError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := test.SetupTrustedResourceConfig(t.Context(), tc.verificationNoMatchPolicy)
+			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.TaskRunSpec{
@@ -1389,7 +1503,7 @@ func TestGetTaskFunc_V1beta1Task_VerifyNoError(t *testing.T) {
 }
 
 func TestGetTaskFunc_V1beta1Task_VerifyError(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 	tektonclient := fake.NewSimpleClientset()
 
@@ -1509,7 +1623,7 @@ func TestGetTaskFunc_V1beta1Task_VerifyError(t *testing.T) {
 }
 
 func TestGetTaskFunc_V1Task_VerifyNoError(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 	tektonclient := fake.NewSimpleClientset()
 
@@ -1653,7 +1767,7 @@ func TestGetTaskFunc_V1Task_VerifyNoError(t *testing.T) {
 }
 
 func TestGetTaskFunc_V1Task_VerifyError(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 	tektonclient := fake.NewSimpleClientset()
 
@@ -1768,7 +1882,7 @@ func TestGetTaskFunc_V1Task_VerifyError(t *testing.T) {
 }
 
 func TestGetTaskFunc_GetFuncError(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	_, k8sclient, vps := test.SetupMatchAllVerificationPolicies(t, "trusted-resources")
 	tektonclient := fake.NewSimpleClientset()
 

@@ -406,7 +406,7 @@ func TestReadResultsFromDisk(t *testing.T) {
 		},
 	} {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			terminationPath := "termination"
 			if terminationFile, err := os.CreateTemp(t.TempDir(), "termination"); err != nil {
 				t.Fatalf("unexpected error creating temporary termination file: %v", err)
@@ -653,7 +653,7 @@ func TestEntrypointerResults(t *testing.T) {
 		signVerify:      true,
 	}} {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			fw, fpw := &fakeWaiter{}, &fakePostWriter{}
 			var fr Runner = &fakeRunner{}
 			timeout := time.Duration(0)
@@ -759,7 +759,7 @@ func Test_waitingCancellation(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(t.Context())
+			ctx, cancel := context.WithCancel(context.Background())
 			fw := &fakeWaiter{}
 			err := Entrypointer{
 				Waiter: fw,

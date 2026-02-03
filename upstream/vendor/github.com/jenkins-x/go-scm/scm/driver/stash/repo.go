@@ -580,14 +580,8 @@ func convertFromState(from scm.State) string {
 		return "INPROGRESS"
 	case scm.StateSuccess:
 		return "SUCCESSFUL"
-	case scm.StateFailure:
-		return "FAILED"
-	case scm.StateCanceled:
-		return "CANCELLED"
-	case scm.StateUnknown:
-		return "UNKNOWN"
 	default:
-		return "UNKNOWN"
+		return "FAILED"
 	}
 }
 

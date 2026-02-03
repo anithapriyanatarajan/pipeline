@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2023 The Tekton Authors
@@ -41,6 +42,9 @@ func TestPropagatedResults(t *testing.T) {
 
 	ignorePipelineRunStatusFields := cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "Provenance")
 	ignoreTaskRunStatus := cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Sidecars", "Provenance")
+	requireAlphaFeatureFlag = requireAnyGate(map[string]string{
+		"enable-api-fields": "alpha",
+	})
 
 	type tests struct {
 		name            string
@@ -57,13 +61,11 @@ func TestPropagatedResults(t *testing.T) {
 	for _, td := range tds {
 		t.Run(td.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := t.Context()
+			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			c, namespace := setup(ctx, t, requireAnyGate(map[string]string{
-				"enable-api-fields": "alpha",
-			}))
+			c, namespace := setup(ctx, t, requireAlphaFeatureFlag)
 
 			knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
 			defer tearDown(ctx, t, c, namespace)

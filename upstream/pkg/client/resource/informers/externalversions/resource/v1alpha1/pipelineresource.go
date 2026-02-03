@@ -19,13 +19,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	context "context"
+	"context"
 	time "time"
 
-	apisresourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
+	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
 	versioned "github.com/tektoncd/pipeline/pkg/client/resource/clientset/versioned"
 	internalinterfaces "github.com/tektoncd/pipeline/pkg/client/resource/informers/externalversions/internalinterfaces"
-	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/client/resource/listers/resource/v1alpha1"
+	v1alpha1 "github.com/tektoncd/pipeline/pkg/client/resource/listers/resource/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // PipelineResources.
 type PipelineResourceInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() resourcev1alpha1.PipelineResourceLister
+	Lister() v1alpha1.PipelineResourceLister
 }
 
 type pipelineResourceInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredPipelineResourceInformer(client versioned.Interface, namespace s
 				return client.TektonV1alpha1().PipelineResources(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&apisresourcev1alpha1.PipelineResource{},
+		&resourcev1alpha1.PipelineResource{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *pipelineResourceInformer) defaultInformer(client versioned.Interface, r
 }
 
 func (f *pipelineResourceInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apisresourcev1alpha1.PipelineResource{}, f.defaultInformer)
+	return f.factory.InformerFor(&resourcev1alpha1.PipelineResource{}, f.defaultInformer)
 }
 
-func (f *pipelineResourceInformer) Lister() resourcev1alpha1.PipelineResourceLister {
-	return resourcev1alpha1.NewPipelineResourceLister(f.Informer().GetIndexer())
+func (f *pipelineResourceInformer) Lister() v1alpha1.PipelineResourceLister {
+	return v1alpha1.NewPipelineResourceLister(f.Informer().GetIndexer())
 }

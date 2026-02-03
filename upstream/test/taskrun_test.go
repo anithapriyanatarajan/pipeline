@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -41,7 +42,7 @@ import (
 )
 
 func TestTaskRunFailure(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -131,7 +132,7 @@ spec:
 		t.Fatalf("expected at least %d steps, got %d", expectedStepNumber, len(taskrun.Status.Steps))
 	}
 	ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Running", "Provenance")
+	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Running")
 	lastStepIndex := len(expectedStepState) - 1
 	for i := range lastStepIndex {
 		if d := cmp.Diff(taskrun.Status.Steps[i], expectedStepState[i], ignoreTerminatedFields, ignoreStepFields); d != "" {
@@ -164,7 +165,7 @@ spec:
 }
 
 func TestTaskRunStatus(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -226,7 +227,7 @@ spec:
 	}}
 
 	ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance")
+	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
 	if d := cmp.Diff(taskrun.Status.Steps, expectedStepState, ignoreTerminatedFields, ignoreStepFields); d != "" {
 		t.Fatalf("-got, +want: %v", d)
 	}
@@ -241,7 +242,7 @@ spec:
 }
 
 func TestTaskRunStepsTerminationReasons(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	c, namespace := setup(ctx, t)
 	defer tearDown(ctx, t, c, namespace)
 	fqImageName := getTestImage(busyboxImage)
@@ -480,7 +481,7 @@ spec:
 			}
 
 			ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID", "Message")
-			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance")
+			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
 			if d := cmp.Diff(taskRunState.Status.Steps, test.expectedStepStatus, ignoreTerminatedFields, ignoreStepFields); d != "" {
 				t.Fatalf("-got, +want: %v", d)
 			}
@@ -515,7 +516,7 @@ func cancelTaskRun(t *testing.T, ctx context.Context, taskRunName string, c *cli
 }
 
 func TestTaskRunRetryFailure(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -595,7 +596,7 @@ spec:
 		Container:         "step-unnamed-0",
 	}}
 	ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance")
+	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
 	if d := cmp.Diff(taskrun.Status.Steps, expectedStepState, ignoreTerminatedFields, ignoreStepFields); d != "" {
 		t.Fatalf("-got, +want: %v", d)
 	}
@@ -605,13 +606,11 @@ spec:
 }
 
 func TestTaskRunResolveDefaultParameterSubstitutionOnStepAction(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	c, namespace := setup(ctx, t, requireAllGates(map[string]string{
-		"enable-api-fields": "beta",
-	}))
+	c, namespace := setup(ctx, t, requireAllGates(requireEnableStepActionsGate))
 
 	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
 	defer tearDown(ctx, t, c, namespace)

@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -424,7 +425,7 @@ func TestHasTimedOut(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.taskRun.HasTimedOut(t.Context(), testClock)
+			result := tc.taskRun.HasTimedOut(context.Background(), testClock)
 			if d := cmp.Diff(tc.expectedStatus, result); d != "" {
 				t.Fatal(diff.PrintWantGot(d))
 			}

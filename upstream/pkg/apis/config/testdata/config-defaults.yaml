@@ -23,4 +23,3 @@ data:
   default-managed-by-label-value: "something-else"
   default-resolver-type: "git"
   default-imagepullbackoff-timeout: "5s"
-  default-step-ref-concurrency-limit: "5"

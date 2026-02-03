@@ -60,8 +60,8 @@ jobs:
         GITHUB_PULL_URL: ${{ github.event.client_payload.github.payload.issue.pull_request.url }}
 
     - name: Create comment
-      if: ${{ failure() }}
-      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      if: ${{ failure() && steps.landStack.outcome == 'failure' }}
+      uses: peter-evans/create-or-update-comment@v4
       with:
         token: ${{ secrets.CHATOPS_TOKEN }}
         repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
@@ -73,7 +73,7 @@ jobs:
 
     - name: Add reaction
       if: ${{ success() }}
-      uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+      uses: peter-evans/create-or-update-comment@v4
       with:
         token: ${{ secrets.CHATOPS_TOKEN }}
         repository: ${{ github.event.client_payload.github.payload.repository.full_name }}

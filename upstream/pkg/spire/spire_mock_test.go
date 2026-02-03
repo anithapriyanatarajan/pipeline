@@ -17,6 +17,7 @@ limitations under the License.
 package spire
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func TestMock_TaskRunSign(t *testing.T) {
 		cc ControllerAPIClient = spireMockClient
 	)
 
-	ctx := t.Context()
+	ctx := context.Background()
 	var err error
 
 	for _, tr := range testTaskRuns() {
@@ -85,7 +86,7 @@ func TestMock_CheckHashSimilarities(t *testing.T) {
 		cc ControllerAPIClient = spireMockClient
 	)
 
-	ctx := t.Context()
+	ctx := context.Background()
 	trs := testTaskRuns()
 	tr1, tr2 := trs[0], trs[1]
 
@@ -201,7 +202,7 @@ func TestMock_CheckTamper(t *testing.T) {
 			cc ControllerAPIClient = spireMockClient
 		)
 
-		ctx := t.Context()
+		ctx := context.Background()
 		for _, tr := range testTaskRuns() {
 			err := cc.AppendStatusInternalAnnotation(ctx, tr)
 			if err != nil {
@@ -273,7 +274,7 @@ func TestMock_TaskRunResultsSign(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		ctx := t.Context()
+		ctx := context.Background()
 		for _, tr := range testTaskRuns() {
 			var err error
 			if !tt.skipEntryCreate {
@@ -497,7 +498,7 @@ func TestMock_TaskRunResultsSignTamper(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		ctx := t.Context()
+		ctx := context.Background()
 		for _, tr := range testTaskRuns() {
 			var err error
 			// Pod should not be nil, but it isn't used in mocking

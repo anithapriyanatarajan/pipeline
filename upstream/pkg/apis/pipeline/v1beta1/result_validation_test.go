@@ -17,11 +17,13 @@ limitations under the License.
 package v1beta1_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/test/diff"
 	"knative.dev/pkg/apis"
@@ -62,7 +64,7 @@ func TestResultsValidate(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if err := tt.Result.Validate(ctx); err != nil {
 				t.Errorf("TaskSpec.Validate() = %v", err)
 			}
@@ -113,7 +115,7 @@ func TestResultsValidateError(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			err := tt.Result.Validate(ctx)
 			if err == nil {
 				t.Fatalf("Expected an error, got nothing for %v", tt.Result)
@@ -143,7 +145,11 @@ func TestResultsValidateValue(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := config.ToContext(context.Background(), &config.Config{
+				FeatureFlags: &config.FeatureFlags{
+					EnableStepActions: true,
+				},
+			})
 			if err := tt.Result.Validate(ctx); err != nil {
 				t.Errorf("TaskSpec.Validate() = %v", err)
 			}
@@ -153,10 +159,26 @@ func TestResultsValidateValue(t *testing.T) {
 
 func TestResultsValidateValueError(t *testing.T) {
 	tests := []struct {
-		name          string
-		Result        v1beta1.TaskResult
-		expectedError apis.FieldError
+		name              string
+		Result            v1beta1.TaskResult
+		enableStepActions bool
+		expectedError     apis.FieldError
 	}{{
+		name: "enable-step-actions-not-enabled",
+		Result: v1beta1.TaskResult{
+			Name:        "MY-RESULT",
+			Description: "my great result",
+			Type:        v1beta1.ResultsTypeString,
+			Value: &v1beta1.ParamValue{
+				Type:      v1beta1.ParamTypeString,
+				StringVal: "$(steps.stepName.results.resultName)",
+			},
+		},
+		enableStepActions: false,
+		expectedError: apis.FieldError{
+			Message: "feature flag enable-step-actions should be set to true to fetch Results from Steps using StepActions.",
+		},
+	}, {
 		name: "invalid result value type array",
 		Result: v1beta1.TaskResult{
 			Name:        "MY-RESULT",
@@ -166,6 +188,7 @@ func TestResultsValidateValueError(t *testing.T) {
 				Type: v1beta1.ParamTypeArray,
 			},
 		},
+		enableStepActions: true,
 		expectedError: apis.FieldError{
 			Message: `Invalid Type. Wanted string but got: "array"`,
 			Paths:   []string{"MY-RESULT.type"},
@@ -181,6 +204,7 @@ func TestResultsValidateValueError(t *testing.T) {
 				Type: v1beta1.ParamTypeObject,
 			},
 		},
+		enableStepActions: true,
 		expectedError: apis.FieldError{
 			Message: `Invalid Type. Wanted string but got: "object"`,
 			Paths:   []string{"MY-RESULT.type"},
@@ -196,6 +220,7 @@ func TestResultsValidateValueError(t *testing.T) {
 				StringVal: "not a valid format",
 			},
 		},
+		enableStepActions: true,
 		expectedError: apis.FieldError{
 			Message: `Could not extract step name and result name. Expected value to look like $(steps.<stepName>.results.<resultName>) but got "not a valid format"`,
 			Paths:   []string{"MY-RESULT.value"},
@@ -211,6 +236,7 @@ func TestResultsValidateValueError(t *testing.T) {
 				StringVal: "$(steps.foo.foo.results.Bar)",
 			},
 		},
+		enableStepActions: true,
 		expectedError: apis.FieldError{
 			Message: "invalid extracted step name \"foo.foo\"",
 			Paths:   []string{"MY-RESULT.value"},
@@ -227,6 +253,7 @@ func TestResultsValidateValueError(t *testing.T) {
 				StringVal: "$(steps.foo.results.-bar)",
 			},
 		},
+		enableStepActions: true,
 		expectedError: apis.FieldError{
 			Message: "invalid extracted result name \"-bar\"",
 			Paths:   []string{"MY-RESULT.value"},
@@ -235,7 +262,11 @@ func TestResultsValidateValueError(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := config.ToContext(context.Background(), &config.Config{
+				FeatureFlags: &config.FeatureFlags{
+					EnableStepActions: tt.enableStepActions,
+				},
+			})
 			err := tt.Result.Validate(ctx)
 			if err == nil {
 				t.Fatalf("Expected an error, got nothing for %v", tt.Result)

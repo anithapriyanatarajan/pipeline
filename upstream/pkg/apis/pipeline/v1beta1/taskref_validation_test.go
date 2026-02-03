@@ -63,7 +63,7 @@ func TestTaskRef_Valid(t *testing.T) {
 	}}
 	for _, ts := range tests {
 		t.Run(ts.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if ts.wc != nil {
 				ctx = ts.wc(ctx)
 			}
@@ -134,7 +134,7 @@ func TestTaskRef_Invalid(t *testing.T) {
 	}}
 	for _, ts := range tests {
 		t.Run(ts.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if ts.wc != nil {
 				ctx = ts.wc(ctx)
 			}

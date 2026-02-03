@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/tektoncd/pipeline/internal/sidecarlogresults"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
@@ -35,7 +36,6 @@ import (
 	taskrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1/taskrun"
 	listers "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
 	alphalisters "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1alpha1"
-	ctrl "github.com/tektoncd/pipeline/pkg/controller"
 	"github.com/tektoncd/pipeline/pkg/internal/affinityassistant"
 	"github.com/tektoncd/pipeline/pkg/internal/computeresources"
 	"github.com/tektoncd/pipeline/pkg/internal/defaultresourcerequirements"
@@ -62,7 +62,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	corev1Listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/utils/clock"
@@ -184,11 +183,6 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 	// Check if the TaskRun has timed out; if it is, this will set its status
 	// accordingly.
 	if tr.HasTimedOut(ctx, c.Clock) {
-		// Before failing the TaskRun, ensure step statuses are populated from the pod
-		// This prevents a race condition where the timeout occurs before pod status is fetched
-		if err := c.updateStepStatusesFromPod(ctx, tr); err != nil {
-			logger.Warnf("Failed to update step statuses from pod before timeout: %v", err)
-		}
 		message := fmt.Sprintf("TaskRun %q failed to finish within %q", tr.Name, tr.GetTimeout(ctx))
 		err := c.failTaskRun(ctx, tr, v1.TaskRunReasonTimedOut, message)
 		return c.finishReconcileUpdateEmitEvents(ctx, tr, before, err)
@@ -376,7 +370,7 @@ func (c *Reconciler) finishReconcileUpdateEmitEvents(ctx context.Context, tr *v1
 	// Send k8s events and cloud events (when configured)
 	events.Emit(ctx, beforeCondition, afterCondition, tr)
 
-	errs := []error{previousError}
+	merr := multierror.Append(previousError).ErrorOrNil()
 
 	// If the Run has been completed before and remains so at present,
 	// no need to update the labels and annotations
@@ -386,14 +380,14 @@ func (c *Reconciler) finishReconcileUpdateEmitEvents(ctx context.Context, tr *v1
 		if err != nil {
 			logger.Warn("Failed to update TaskRun labels/annotations", zap.Error(err))
 			events.EmitError(controller.GetEventRecorder(ctx), err, tr)
-			errs = append(errs, err)
 		}
+		merr = multierror.Append(merr, err).ErrorOrNil()
 	}
-	joinedErr := errors.Join(errs...)
+
 	if controller.IsPermanentError(previousError) {
-		return controller.NewPermanentError(joinedErr)
+		return controller.NewPermanentError(merr)
 	}
-	return joinedErr
+	return merr
 }
 
 // `prepare` fetches resources the taskrun depends on, runs validation and conversion
@@ -438,7 +432,7 @@ func (c *Reconciler) prepare(ctx context.Context, tr *v1.TaskRun) (*v1.TaskSpec,
 	default:
 		// Store the fetched TaskSpec on the TaskRun for auditing
 		if err := storeTaskSpecAndMergeMeta(ctx, tr, taskSpec, taskMeta); err != nil {
-			logger.Errorf("Failed to store TaskSpec on TaskRun.Status for taskrun %s: %v", tr.Name, err)
+			logger.Errorf("Failed to store TaskSpec on TaskRun.Statusfor taskrun %s: %v", tr.Name, err)
 		}
 	}
 
@@ -464,7 +458,7 @@ func (c *Reconciler) prepare(ctx context.Context, tr *v1.TaskRun) (*v1.TaskSpec,
 		// Store the fetched StepActions to TaskSpec, and update the stored TaskSpec again
 		taskSpec.Steps = steps
 		if err := storeTaskSpecAndMergeMeta(ctx, tr, taskSpec, taskMeta); err != nil {
-			logger.Errorf("Failed to store TaskSpec on TaskRun.Status for taskrun %s: %v", tr.Name, err)
+			logger.Errorf("Failed to store TaskSpec on TaskRun.Statusfor taskrun %s: %v", tr.Name, err)
 		}
 	}
 
@@ -625,7 +619,7 @@ func (c *Reconciler) reconcile(ctx context.Context, tr *v1.TaskRun, rtr *resourc
 			if err := c.pvcHandler.CreatePVCFromVolumeClaimTemplate(ctx, ws, *kmeta.NewControllerRef(tr), tr.Namespace); err != nil {
 				logger.Errorf("Failed to create PVC for TaskRun %s: %v", tr.Name, err)
 				tr.Status.MarkResourceFailed(volumeclaim.ReasonCouldntCreateWorkspacePVC,
-					fmt.Errorf("failed to create PVC for TaskRun %s workspaces correctly: %w",
+					fmt.Errorf("Failed to create PVC for TaskRun %s workspaces correctly: %w",
 						fmt.Sprintf("%s/%s", tr.Namespace, tr.Name), err))
 				return controller.NewPermanentError(err)
 			}
@@ -812,8 +806,8 @@ func (c *Reconciler) failTaskRun(ctx context.Context, tr *v1.TaskRun, reason v1.
 	terminateStepsInPod(tr, reason)
 
 	var err error
-	if (reason == v1.TaskRunReasonCancelled || reason == v1.TaskRunReasonTimedOut) && (config.FromContextOrDefaults(ctx).FeatureFlags.EnableKeepPodOnCancel) {
-		logger.Infof("Canceling task run %q by entrypoint, Reason: %s", tr.Name, reason)
+	if reason == v1.TaskRunReasonCancelled && (config.FromContextOrDefaults(ctx).FeatureFlags.EnableKeepPodOnCancel) {
+		logger.Infof("Canceling task run %q by entrypoint", tr.Name)
 		err = podconvert.CancelPod(ctx, c.KubeClientSet, tr.Namespace, tr.Status.PodName)
 	} else {
 		err = c.KubeClientSet.CoreV1().Pods(tr.Namespace).Delete(ctx, tr.Status.PodName, metav1.DeleteOptions{})
@@ -823,37 +817,6 @@ func (c *Reconciler) failTaskRun(ctx context.Context, tr *v1.TaskRun, reason v1.
 		return err
 	}
 
-	return nil
-}
-
-// updateStepStatusesFromPod fetches the pod and updates step statuses in the TaskRun
-// This is called before failing a TaskRun to ensure step statuses are populated
-func (c *Reconciler) updateStepStatusesFromPod(ctx context.Context, tr *v1.TaskRun) error {
-	logger := logging.FromContext(ctx)
-
-	// If there's no pod yet, nothing to update
-	if tr.Status.PodName == "" {
-		return nil
-	}
-
-	// Fetch the pod
-	pod, err := c.podLister.Pods(tr.Namespace).Get(tr.Status.PodName)
-	if k8serrors.IsNotFound(err) {
-		// Pod doesn't exist yet, nothing to update
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	// Update step statuses from pod using the existing MakeTaskRunStatus function
-	// This ensures consistency with the normal reconciliation path
-	status, err := podconvert.MakeTaskRunStatus(ctx, logger, *tr, pod, c.KubeClientSet, tr.Status.TaskSpec)
-	if err != nil {
-		return err
-	}
-
-	// Only update the Steps field to avoid overwriting other status fields
-	tr.Status.Steps = status.Steps
 	return nil
 }
 
@@ -927,20 +890,6 @@ func (c *Reconciler) createPod(ctx context.Context, ts *v1.TaskSpec, tr *v1.Task
 	// Apply path substitutions for the legacy credentials helper (aka "creds-init")
 	ts = resources.ApplyCredentialsPath(ts, pipeline.CredsDir)
 
-	// Apply parameter substitution to PodTemplate if it exists
-	if tr.Spec.PodTemplate != nil {
-		var defaults []v1.ParamSpec
-		if len(ts.Params) > 0 {
-			defaults = append(defaults, ts.Params...)
-		}
-		updatedPodTemplate := resources.ApplyPodTemplateReplacements(tr.Spec.PodTemplate, tr, defaults...)
-		if updatedPodTemplate != nil {
-			trCopy := tr.DeepCopy()
-			trCopy.Spec.PodTemplate = updatedPodTemplate
-			tr = trCopy
-		}
-	}
-
 	podbuilder := podconvert.Builder{
 		Images:          c.Images,
 		KubeClient:      c.KubeClientSet,
@@ -958,31 +907,7 @@ func (c *Reconciler) createPod(ctx context.Context, ts *v1.TaskSpec, tr *v1.Task
 	// Stash the podname in case there's create conflict so that we can try
 	// to fetch it.
 	podName := pod.Name
-
-	cfg := config.FromContextOrDefaults(ctx)
-	if !cfg.FeatureFlags.EnableWaitExponentialBackoff {
-		pod, err = c.KubeClientSet.CoreV1().Pods(tr.Namespace).Create(ctx, pod, metav1.CreateOptions{})
-	} else {
-		backoff := wait.Backoff{
-			Duration: cfg.WaitExponentialBackoff.Duration, // Initial delay before retry
-			Factor:   cfg.WaitExponentialBackoff.Factor,   // Multiplier for exponential growth
-			Steps:    cfg.WaitExponentialBackoff.Steps,    // Maximum number of retry attempts
-			Cap:      cfg.WaitExponentialBackoff.Cap,      // Maximum time spent before giving up
-		}
-		var result *corev1.Pod
-		err = wait.ExponentialBackoff(backoff, func() (bool, error) {
-			result = nil
-			result, err = c.KubeClientSet.CoreV1().Pods(tr.Namespace).Create(ctx, pod, metav1.CreateOptions{})
-			if err != nil {
-				if ctrl.IsWebhookTimeout(err) {
-					return false, nil // retry
-				}
-				return false, err // do not retry
-			}
-			pod = result
-			return true, nil
-		})
-	}
+	pod, err = c.KubeClientSet.CoreV1().Pods(tr.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 
 	if err == nil && willOverwritePodSetAffinity(tr) {
 		if recorder := controller.GetEventRecorder(ctx); recorder != nil {
@@ -997,10 +922,7 @@ func (c *Reconciler) createPod(ctx context.Context, ts *v1.TaskSpec, tr *v1.Task
 			return p, nil
 		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	return pod, nil
+	return pod, err
 }
 
 // applyParamsContextsResultsAndWorkspaces applies paramater, context, results and workspace substitutions to the TaskSpec.
@@ -1132,7 +1054,11 @@ func storeTaskSpecAndMergeMeta(ctx context.Context, tr *v1.TaskRun, ts *v1.TaskS
 		// Propagate labels from Task to TaskRun. TaskRun labels take precedences over Task.
 		tr.ObjectMeta.Labels = kmap.Union(meta.Labels, tr.ObjectMeta.Labels)
 		if tr.Spec.TaskRef != nil {
-			tr.ObjectMeta.Labels[pipeline.TaskLabelKey] = meta.Name
+			if tr.Spec.TaskRef.Kind == v1.ClusterTaskRefKind {
+				tr.ObjectMeta.Labels[pipeline.ClusterTaskLabelKey] = meta.Name
+			} else {
+				tr.ObjectMeta.Labels[pipeline.TaskLabelKey] = meta.Name
+			}
 		}
 	}
 

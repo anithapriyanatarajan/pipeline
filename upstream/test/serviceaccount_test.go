@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -31,7 +32,7 @@ import (
 )
 
 func TestPipelineRunWithServiceAccounts(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -193,7 +194,7 @@ spec:
 }
 
 func TestPipelineRunWithServiceAccountNameAndTaskRunSpec(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

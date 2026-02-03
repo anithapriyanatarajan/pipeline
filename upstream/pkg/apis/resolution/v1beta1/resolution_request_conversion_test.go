@@ -18,6 +18,7 @@
 package v1beta1_test
 
 import (
+	"context"
 	"testing"
 
 	pipelinev1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -27,11 +28,11 @@ import (
 func TestResolutionRequestConversionBadType(t *testing.T) {
 	good, bad := &v1beta1.ResolutionRequest{}, &pipelinev1beta1.Task{}
 
-	if err := good.ConvertTo(t.Context(), bad); err == nil {
+	if err := good.ConvertTo(context.Background(), bad); err == nil {
 		t.Errorf("ConvertTo() = %#v, wanted error", bad)
 	}
 
-	if err := good.ConvertFrom(t.Context(), bad); err == nil {
+	if err := good.ConvertFrom(context.Background(), bad); err == nil {
 		t.Errorf("ConvertFrom() = %#v, wanted error", good)
 	}
 }

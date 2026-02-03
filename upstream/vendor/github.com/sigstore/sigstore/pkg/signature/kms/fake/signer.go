@@ -18,7 +18,6 @@ package fake
 import (
 	"context"
 	"crypto"
-	"fmt"
 	"io"
 
 	"github.com/sigstore/sigstore/pkg/signature"
@@ -58,11 +57,7 @@ func LoadSignerVerifier(ctx context.Context, hf crypto.Hash) (*SignerVerifier, e
 		}
 		return sv, nil
 	}
-	pk, ok := val.(crypto.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("error asserting crypto.PrivateKey")
-	}
-	signer, err := signature.LoadSignerVerifier(pk, hf)
+	signer, err := signature.LoadSignerVerifier(val.(crypto.PrivateKey), hf)
 	if err != nil {
 		return nil, err
 	}

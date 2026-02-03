@@ -1,4 +1,5 @@
 //go:build conformance
+// +build conformance
 
 /*
 Copyright 2020 The Tekton Authors
@@ -41,7 +42,7 @@ type conditionFn func(name string) ConditionAccessorFn
 // searve as part of the OSS conformance test suite but aims to keep the
 // devel conformant and to prevent regressions.
 func TestTaskRun(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -188,7 +189,7 @@ spec:
 			}
 
 			ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Name", "Container", "Provenance")
+			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Name", "Container")
 			if d := cmp.Diff(tr.Status.Steps, tc.expectedStepState, ignoreTerminatedFields, ignoreStepFields); d != "" {
 				t.Fatalf("-got, +want: %v", d)
 			}

@@ -41,6 +41,8 @@ type TaskResult struct {
 }
 
 // StepResult used to describe the Results of a Step.
+//
+// This is field is at an BETA stability level and gated by "enable-step-actions" feature flag.
 type StepResult struct {
 	// Name the given name
 	Name string `json:"name"`

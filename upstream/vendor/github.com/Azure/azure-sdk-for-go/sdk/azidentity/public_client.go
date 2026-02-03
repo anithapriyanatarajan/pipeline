@@ -154,7 +154,12 @@ func (p *publicClient) GetToken(ctx context.Context, tro policy.TokenRequestOpti
 	if p.opts.DisableAutomaticAuthentication {
 		return azcore.AccessToken{}, newAuthenticationRequiredError(p.name, tro)
 	}
-	return p.reqToken(ctx, client, tro)
+	at, err := p.reqToken(ctx, client, tro)
+	if err == nil {
+		msg := fmt.Sprintf("%s.GetToken() acquired a token for scope %q", p.name, strings.Join(ar.GrantedScopes, ", "))
+		log.Write(EventAuthentication, msg)
+	}
+	return at, err
 }
 
 // reqToken requests a token from the MSAL public client. It's separate from GetToken() to enable Authenticate() to bypass the cache.
@@ -237,13 +242,11 @@ func (p *publicClient) newMSALClient(enableCAE bool) (msalPublicClient, error) {
 
 func (p *publicClient) token(ar public.AuthResult, err error) (azcore.AccessToken, error) {
 	if err == nil {
-		msg := fmt.Sprintf(scopeLogFmt, p.name, strings.Join(ar.GrantedScopes, ", "))
-		log.Write(EventAuthentication, msg)
 		p.record, err = newAuthenticationRecord(ar)
 	} else {
 		err = newAuthenticationFailedErrorFromMSAL(p.name, err)
 	}
-	return azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC(), RefreshOn: ar.Metadata.RefreshOn.UTC()}, err
+	return azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 }
 
 // resolveTenant returns the correct WithTenantID() argument for a token request given the client's

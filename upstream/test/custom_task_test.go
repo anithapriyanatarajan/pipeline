@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -59,7 +60,7 @@ var (
 )
 
 func TestCustomTask(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -253,7 +254,7 @@ spec:
 // the metric that is emitted to track how long it took.
 func WaitForCustomRunSpecCancelled(ctx context.Context, c *clients, name string, desc string) error {
 	metricName := fmt.Sprintf("WaitForRunSpecCancelled/%s/%s", name, desc)
-	_, span := trace.StartSpan(ctx, metricName)
+	_, span := trace.StartSpan(context.Background(), metricName)
 	defer span.End()
 
 	return pollImmediateWithContext(ctx, func() (bool, error) {
@@ -269,11 +270,11 @@ func WaitForCustomRunSpecCancelled(ctx context.Context, c *clients, name string,
 // verify that pipelinerun timeout works and leads to the correct Run Spec.status
 func TestPipelineRunCustomTaskTimeout(t *testing.T) {
 	// cancel the context after we have waited a suitable buffer beyond the given deadline.
-	ctx, cancel := context.WithTimeout(t.Context(), timeout+2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout+2*time.Minute)
 	defer cancel()
 	c, namespace := setup(ctx, t)
-	knativetest.CleanupOnInterrupt(func() { tearDown(t.Context(), t, c, namespace) }, t.Logf)
-	defer tearDown(t.Context(), t, c, namespace)
+	knativetest.CleanupOnInterrupt(func() { tearDown(context.Background(), t, c, namespace) }, t.Logf)
+	defer tearDown(context.Background(), t, c, namespace)
 
 	pipeline := parse.MustParseV1Pipeline(t, fmt.Sprintf(`
 metadata:
@@ -384,7 +385,7 @@ spec:
 func applyV1Beta1Controller(t *testing.T) {
 	t.Helper()
 	t.Log("Creating Wait v1beta1.CustomRun Custom Task Controller...")
-	cmd := exec.Command("ko", "apply", "--platform", "linux/amd64,linux/arm64,linux/s390x,linux/ppc64le", "-f", "./config/controller.yaml")
+	cmd := exec.Command("ko", "apply", "--platform", "linux/amd64,linux/s390x,linux/ppc64le", "-f", "./config/controller.yaml")
 	cmd.Dir = betaWaitTaskDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -404,7 +405,7 @@ func cleanUpV1beta1Controller(t *testing.T) {
 }
 
 func TestWaitCustomTask_V1_PipelineRun(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -415,6 +416,8 @@ func TestWaitCustomTask_V1_PipelineRun(t *testing.T) {
 	applyV1Beta1Controller(t)
 	// Cleanup the controller after finishing the test
 	defer cleanUpV1beta1Controller(t)
+
+	featureFlags := getFeatureFlagsBaseOnAPIFlag(t)
 
 	for _, tc := range []struct {
 		name                  string
@@ -648,6 +651,9 @@ func TestWaitCustomTask_V1_PipelineRun(t *testing.T) {
 								},
 							},
 						},
+						Provenance: &v1.Provenance{
+							FeatureFlags: featureFlags,
+						},
 					},
 				},
 			}
@@ -685,10 +691,6 @@ func TestWaitCustomTask_V1_PipelineRun(t *testing.T) {
 				filterCondition,
 				filterCustomRunStatus,
 				filterPipelineRunStatus,
-				// Ignoring Provenance field as it differs from one instance to the other (different flags,
-				// new flags, ...). It can also be modified by another test. In addition, we don't care about its value here.
-				// #9071, #9066
-				ignorePipelineRunProvenance,
 				// ignore serviceaccount field also, because it can be different based on the value in config-defaults
 				ignoreSAPipelineRunSpec,
 			); d != "" {

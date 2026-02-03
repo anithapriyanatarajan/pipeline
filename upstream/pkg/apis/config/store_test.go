@@ -17,6 +17,7 @@ limitations under the License.
 package config_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -33,7 +34,6 @@ func TestStoreLoadWithContext(t *testing.T) {
 	spireConfig := test.ConfigMapFromTestFile(t, "config-spire")
 	eventsConfig := test.ConfigMapFromTestFile(t, "config-events")
 	tracingConfig := test.ConfigMapFromTestFile(t, "config-tracing")
-	waitExponentialBackoffConfig := test.ConfigMapFromTestFile(t, "config-wait-exponential-backoff")
 
 	expectedDefaults, _ := config.NewDefaultsFromConfigMap(defaultConfig)
 	expectedFeatures, _ := config.NewFeatureFlagsFromConfigMap(featuresConfig)
@@ -41,16 +41,14 @@ func TestStoreLoadWithContext(t *testing.T) {
 	expectedSpireConfig, _ := config.NewSpireConfigFromConfigMap(spireConfig)
 	expectedEventsConfig, _ := config.NewEventsFromConfigMap(eventsConfig)
 	expectedTracingConfig, _ := config.NewTracingFromConfigMap(tracingConfig)
-	expectedWaitExponentialBackoffConfig, _ := config.NewWaitExponentialBackoffFromConfigMap(waitExponentialBackoffConfig)
 
 	expected := &config.Config{
-		Defaults:               expectedDefaults,
-		FeatureFlags:           expectedFeatures,
-		Metrics:                metrics,
-		SpireConfig:            expectedSpireConfig,
-		Events:                 expectedEventsConfig,
-		Tracing:                expectedTracingConfig,
-		WaitExponentialBackoff: expectedWaitExponentialBackoffConfig,
+		Defaults:     expectedDefaults,
+		FeatureFlags: expectedFeatures,
+		Metrics:      metrics,
+		SpireConfig:  expectedSpireConfig,
+		Events:       expectedEventsConfig,
+		Tracing:      expectedTracingConfig,
 	}
 
 	store := config.NewStore(logtesting.TestLogger(t))
@@ -60,9 +58,8 @@ func TestStoreLoadWithContext(t *testing.T) {
 	store.OnConfigChanged(spireConfig)
 	store.OnConfigChanged(eventsConfig)
 	store.OnConfigChanged(tracingConfig)
-	store.OnConfigChanged(waitExponentialBackoffConfig)
 
-	cfg := config.FromContext(store.ToContext(t.Context()))
+	cfg := config.FromContext(store.ToContext(context.Background()))
 
 	if d := cmp.Diff(expected, cfg); d != "" {
 		t.Errorf("Unexpected config %s", diff.PrintWantGot(d))
@@ -71,18 +68,17 @@ func TestStoreLoadWithContext(t *testing.T) {
 
 func TestStoreLoadWithContext_Empty(t *testing.T) {
 	want := &config.Config{
-		Defaults:               config.DefaultConfig.DeepCopy(),
-		FeatureFlags:           config.DefaultFeatureFlags.DeepCopy(),
-		Metrics:                config.DefaultMetrics.DeepCopy(),
-		SpireConfig:            config.DefaultSpire.DeepCopy(),
-		Events:                 config.DefaultEvents.DeepCopy(),
-		Tracing:                config.DefaultTracing.DeepCopy(),
-		WaitExponentialBackoff: config.DefaultWaitExponentialBackoff.DeepCopy(),
+		Defaults:     config.DefaultConfig.DeepCopy(),
+		FeatureFlags: config.DefaultFeatureFlags.DeepCopy(),
+		Metrics:      config.DefaultMetrics.DeepCopy(),
+		SpireConfig:  config.DefaultSpire.DeepCopy(),
+		Events:       config.DefaultEvents.DeepCopy(),
+		Tracing:      config.DefaultTracing.DeepCopy(),
 	}
 
 	store := config.NewStore(logtesting.TestLogger(t))
 
-	got := config.FromContext(store.ToContext(t.Context()))
+	got := config.FromContext(store.ToContext(context.Background()))
 
 	if d := cmp.Diff(want, got); d != "" {
 		t.Errorf("Unexpected config %s", diff.PrintWantGot(d))

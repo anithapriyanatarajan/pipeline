@@ -17,6 +17,7 @@ limitations under the License.
 package common_test
 
 import (
+	"context"
 	"testing"
 
 	common "github.com/tektoncd/pipeline/pkg/resolution/common"
@@ -26,7 +27,7 @@ func TestRequestNamespace(t *testing.T) {
 	namespaceA := "foo"
 	namespaceB := "bar"
 
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx = common.InjectRequestNamespace(ctx, namespaceA)
 	if common.RequestNamespace(ctx) != namespaceA {
 		t.Fatalf("expected namespace to be stored as part of context")
@@ -37,7 +38,7 @@ func TestRequestNamespace(t *testing.T) {
 		t.Fatalf("expected stored namespace to be immutable once set")
 	}
 
-	ctx = t.Context()
+	ctx = context.Background()
 	if common.RequestNamespace(ctx) != "" {
 		t.Fatalf("expected empty namespace returned if no value was previously injected")
 	}
@@ -47,7 +48,7 @@ func TestRequestName(t *testing.T) {
 	nameA := "foo"
 	nameB := "bar"
 
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx = common.InjectRequestName(ctx, nameA)
 	if common.RequestName(ctx) != nameA {
 		t.Fatalf("expected namespace to be stored as part of context")
@@ -58,7 +59,7 @@ func TestRequestName(t *testing.T) {
 		t.Fatalf("expected stored namespace to be immutable once set")
 	}
 
-	ctx = t.Context()
+	ctx = context.Background()
 	if common.RequestName(ctx) != "" {
 		t.Fatalf("expected empty namespace returned if no value was previously injected")
 	}

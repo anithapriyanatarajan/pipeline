@@ -136,13 +136,6 @@ spec:
                             if enabled, pause TaskRun on failure of a step
                             failed step will not exit
                           type: string
-                managedBy:
-                  description: |-
-                    ManagedBy indicates which controller is responsible for reconciling
-                    this resource. If unset or set to "tekton.dev/pipeline", the default
-                    Tekton controller will manage this resource.
-                    This field is immutable.
-                  type: string
                 params:
                   description: Params is a list of Param
                   type: array
@@ -200,12 +193,9 @@ spec:
                             type: object
                             properties:
                               name:
-                                description: |-
-                                  Name is this DNS resolver option's name.
-                                  Required.
+                                description: Required.
                                 type: string
                               value:
-                                description: Value is this DNS resolver option's value.
                                 type: string
                           x-kubernetes-list-type: atomic
                         searches:
@@ -419,8 +409,205 @@ spec:
                       description: |-
                         SecurityContext holds pod-level security attributes and common container settings.
                         Optional: Defaults to empty.  See type description for default values of each field.
-                        See Pod.spec.securityContext (API version: v1)
-                      x-kubernetes-preserve-unknown-fields: true
+                      type: object
+                      properties:
+                        appArmorProfile:
+                          description: |-
+                            appArmorProfile is the AppArmor options to use by the containers in this pod.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: object
+                          required:
+                            - type
+                          properties:
+                            localhostProfile:
+                              description: |-
+                                localhostProfile indicates a profile loaded on the node that should be used.
+                                The profile must be preconfigured on the node to work.
+                                Must match the loaded name of the profile.
+                                Must be set if and only if type is "Localhost".
+                              type: string
+                            type:
+                              description: |-
+                                type indicates which kind of AppArmor profile will be applied.
+                                Valid options are:
+                                  Localhost - a profile pre-loaded on the node.
+                                  RuntimeDefault - the container runtime's default profile.
+                                  Unconfined - no AppArmor enforcement.
+                              type: string
+                        fsGroup:
+                          description: |-
+                            A special supplemental group that applies to all containers in a pod.
+                            Some volume types allow the Kubelet to change the ownership of that volume
+                            to be owned by the pod:
+
+                            1. The owning GID will be the FSGroup
+                            2. The setgid bit is set (new files created in the volume will be owned by FSGroup)
+                            3. The permission bits are OR'd with rw-rw----
+
+                            If unset, the Kubelet will not modify the ownership and permissions of any volume.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: integer
+                          format: int64
+                        fsGroupChangePolicy:
+                          description: |-
+                            fsGroupChangePolicy defines behavior of changing ownership and permission of the volume
+                            before being exposed inside Pod. This field will only apply to
+                            volume types which support fsGroup based ownership(and permissions).
+                            It will have no effect on ephemeral volume types such as: secret, configmaps
+                            and emptydir.
+                            Valid values are "OnRootMismatch" and "Always". If not specified, "Always" is used.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: string
+                        runAsGroup:
+                          description: |-
+                            The GID to run the entrypoint of the container process.
+                            Uses runtime default if unset.
+                            May also be set in SecurityContext.  If set in both SecurityContext and
+                            PodSecurityContext, the value specified in SecurityContext takes precedence
+                            for that container.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: integer
+                          format: int64
+                        runAsNonRoot:
+                          description: |-
+                            Indicates that the container must run as a non-root user.
+                            If true, the Kubelet will validate the image at runtime to ensure that it
+                            does not run as UID 0 (root) and fail to start the container if it does.
+                            If unset or false, no such validation will be performed.
+                            May also be set in SecurityContext.  If set in both SecurityContext and
+                            PodSecurityContext, the value specified in SecurityContext takes precedence.
+                          type: boolean
+                        runAsUser:
+                          description: |-
+                            The UID to run the entrypoint of the container process.
+                            Defaults to user specified in image metadata if unspecified.
+                            May also be set in SecurityContext.  If set in both SecurityContext and
+                            PodSecurityContext, the value specified in SecurityContext takes precedence
+                            for that container.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: integer
+                          format: int64
+                        seLinuxOptions:
+                          description: |-
+                            The SELinux context to be applied to all containers.
+                            If unspecified, the container runtime will allocate a random SELinux context for each
+                            container.  May also be set in SecurityContext.  If set in
+                            both SecurityContext and PodSecurityContext, the value specified in SecurityContext
+                            takes precedence for that container.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: object
+                          properties:
+                            level:
+                              description: Level is SELinux level label that applies to the container.
+                              type: string
+                            role:
+                              description: Role is a SELinux role label that applies to the container.
+                              type: string
+                            type:
+                              description: Type is a SELinux type label that applies to the container.
+                              type: string
+                            user:
+                              description: User is a SELinux user label that applies to the container.
+                              type: string
+                        seccompProfile:
+                          description: |-
+                            The seccomp options to use by the containers in this pod.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: object
+                          required:
+                            - type
+                          properties:
+                            localhostProfile:
+                              description: |-
+                                localhostProfile indicates a profile defined in a file on the node should be used.
+                                The profile must be preconfigured on the node to work.
+                                Must be a descending path, relative to the kubelet's configured seccomp profile location.
+                                Must be set if type is "Localhost". Must NOT be set for any other type.
+                              type: string
+                            type:
+                              description: |-
+                                type indicates which kind of seccomp profile will be applied.
+                                Valid options are:
+
+                                Localhost - a profile defined in a file on the node should be used.
+                                RuntimeDefault - the container runtime default profile should be used.
+                                Unconfined - no profile should be applied.
+                              type: string
+                        supplementalGroups:
+                          description: |-
+                            A list of groups applied to the first process run in each container, in
+                            addition to the container's primary GID and fsGroup (if specified).  If
+                            the SupplementalGroupsPolicy feature is enabled, the
+                            supplementalGroupsPolicy field determines whether these are in addition
+                            to or instead of any group memberships defined in the container image.
+                            If unspecified, no additional groups are added, though group memberships
+                            defined in the container image may still be used, depending on the
+                            supplementalGroupsPolicy field.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: array
+                          items:
+                            type: integer
+                            format: int64
+                          x-kubernetes-list-type: atomic
+                        supplementalGroupsPolicy:
+                          description: |-
+                            Defines how supplemental groups of the first container processes are calculated.
+                            Valid values are "Merge" and "Strict". If not specified, "Merge" is used.
+                            (Alpha) Using the field requires the SupplementalGroupsPolicy feature gate to be enabled
+                            and the container runtime must implement support for this feature.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: string
+                        sysctls:
+                          description: |-
+                            Sysctls hold a list of namespaced sysctls used for the pod. Pods with unsupported
+                            sysctls (by the container runtime) might fail to launch.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: array
+                          items:
+                            description: Sysctl defines a kernel parameter to be set
+                            type: object
+                            required:
+                              - name
+                              - value
+                            properties:
+                              name:
+                                description: Name of a property to set
+                                type: string
+                              value:
+                                description: Value of a property to set
+                                type: string
+                          x-kubernetes-list-type: atomic
+                        windowsOptions:
+                          description: |-
+                            The Windows specific settings applied to all containers.
+                            If unspecified, the options within a container's SecurityContext will be used.
+                            If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
+                            Note that this field cannot be set when spec.os.name is linux.
+                          type: object
+                          properties:
+                            gmsaCredentialSpec:
+                              description: |-
+                                GMSACredentialSpec is where the GMSA admission webhook
+                                (https://github.com/kubernetes-sigs/windows-gmsa) inlines the contents of the
+                                GMSA credential spec named by the GMSACredentialSpecName field.
+                              type: string
+                            gmsaCredentialSpecName:
+                              description: GMSACredentialSpecName is the name of the GMSA credential spec to use.
+                              type: string
+                            hostProcess:
+                              description: |-
+                                HostProcess determines if a container should be run as a 'Host Process' container.
+                                All of a Pod's containers must have the same effective HostProcess value
+                                (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).
+                                In addition, if HostProcess is true then HostNetwork must also be set to true.
+                              type: boolean
+                            runAsUserName:
+                              description: |-
+                                The UserName in Windows to run the entrypoint of the container process.
+                                Defaults to the user specified in image metadata if unspecified.
+                                May also be set in PodSecurityContext. If set in both SecurityContext and
+                                PodSecurityContext, the value specified in SecurityContext takes precedence.
+                              type: string
                     tolerations:
                       description: If specified, the pod's tolerations.
                       type: array
@@ -1026,7 +1213,8 @@ spec:
                       description: |-
                         TaskKind indicates the Kind of the Task:
                         1. Namespaced Task when Kind is set to "Task". If Kind is "", it defaults to "Task".
-                        2. Custom Task when Kind is non-empty and APIVersion is non-empty
+                        2. Cluster-Scoped Task when Kind is set to "ClusterTask"
+                        3. Custom Task when Kind is non-empty and APIVersion is non-empty
                       type: string
                     name:
                       description: 'Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names'
@@ -1745,7 +1933,7 @@ spec:
                           description: |-
                             EntryPoint identifies the entry point into the build. This is often a path to a
                             build definition file and/or a target label within that file.
-                            Example: "task/git-clone/0.10/git-clone.yaml"
+                            Example: "task/git-clone/0.8/git-clone.yaml"
                           type: string
                         uri:
                           description: |-
@@ -1760,6 +1948,8 @@ spec:
                           type: boolean
                         coschedule:
                           type: string
+                        disableAffinityAssistant:
+                          type: boolean
                         disableCredsInit:
                           type: boolean
                         disableInlineSpec:
@@ -1781,9 +1971,6 @@ spec:
                         enableProvenanceInStatus:
                           type: boolean
                         enableStepActions:
-                          description: EnableStepActions is a no-op flag since StepActions are stable
-                          type: boolean
-                        enableWaitExponentialBackoff:
                           type: boolean
                         enforceNonfalsifiability:
                           type: string
@@ -1824,7 +2011,7 @@ spec:
                           description: |-
                             EntryPoint identifies the entry point into the build. This is often a path to a
                             build definition file and/or a target label within that file.
-                            Example: "task/git-clone/0.10/git-clone.yaml"
+                            Example: "task/git-clone/0.8/git-clone.yaml"
                           type: string
                         uri:
                           description: |-
@@ -2034,7 +2221,7 @@ spec:
                                 description: |-
                                   EntryPoint identifies the entry point into the build. This is often a path to a
                                   build definition file and/or a target label within that file.
-                                  Example: "task/git-clone/0.10/git-clone.yaml"
+                                  Example: "task/git-clone/0.8/git-clone.yaml"
                                 type: string
                               uri:
                                 description: |-
@@ -2049,6 +2236,8 @@ spec:
                                 type: boolean
                               coschedule:
                                 type: string
+                              disableAffinityAssistant:
+                                type: boolean
                               disableCredsInit:
                                 type: boolean
                               disableInlineSpec:
@@ -2070,9 +2259,6 @@ spec:
                               enableProvenanceInStatus:
                                 type: boolean
                               enableStepActions:
-                                description: EnableStepActions is a no-op flag since StepActions are stable
-                                type: boolean
-                              enableWaitExponentialBackoff:
                                 type: boolean
                               enforceNonfalsifiability:
                                 type: string
@@ -2113,7 +2299,7 @@ spec:
                                 description: |-
                                   EntryPoint identifies the entry point into the build. This is often a path to a
                                   build definition file and/or a target label within that file.
-                                  Example: "task/git-clone/0.10/git-clone.yaml"
+                                  Example: "task/git-clone/0.8/git-clone.yaml"
                                 type: string
                               uri:
                                 description: |-
@@ -2343,13 +2529,6 @@ spec:
                             if enabled, pause TaskRun on failure of a step
                             failed step will not exit
                           type: string
-                managedBy:
-                  description: |-
-                    ManagedBy indicates which controller is responsible for reconciling
-                    this resource. If unset or set to "tekton.dev/pipeline", the default
-                    Tekton controller will manage this resource.
-                    This field is immutable.
-                  type: string
                 params:
                   description: Params is a list of Param
                   type: array
@@ -2407,12 +2586,9 @@ spec:
                             type: object
                             properties:
                               name:
-                                description: |-
-                                  Name is this DNS resolver option's name.
-                                  Required.
+                                description: Required.
                                 type: string
                               value:
-                                description: Value is this DNS resolver option's value.
                                 type: string
                           x-kubernetes-list-type: atomic
                         searches:
@@ -2626,8 +2802,205 @@ spec:
                       description: |-
                         SecurityContext holds pod-level security attributes and common container settings.
                         Optional: Defaults to empty.  See type description for default values of each field.
-                        See Pod.spec.securityContext (API version: v1)
-                      x-kubernetes-preserve-unknown-fields: true
+                      type: object
+                      properties:
+                        appArmorProfile:
+                          description: |-
+                            appArmorProfile is the AppArmor options to use by the containers in this pod.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: object
+                          required:
+                            - type
+                          properties:
+                            localhostProfile:
+                              description: |-
+                                localhostProfile indicates a profile loaded on the node that should be used.
+                                The profile must be preconfigured on the node to work.
+                                Must match the loaded name of the profile.
+                                Must be set if and only if type is "Localhost".
+                              type: string
+                            type:
+                              description: |-
+                                type indicates which kind of AppArmor profile will be applied.
+                                Valid options are:
+                                  Localhost - a profile pre-loaded on the node.
+                                  RuntimeDefault - the container runtime's default profile.
+                                  Unconfined - no AppArmor enforcement.
+                              type: string
+                        fsGroup:
+                          description: |-
+                            A special supplemental group that applies to all containers in a pod.
+                            Some volume types allow the Kubelet to change the ownership of that volume
+                            to be owned by the pod:
+
+                            1. The owning GID will be the FSGroup
+                            2. The setgid bit is set (new files created in the volume will be owned by FSGroup)
+                            3. The permission bits are OR'd with rw-rw----
+
+                            If unset, the Kubelet will not modify the ownership and permissions of any volume.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: integer
+                          format: int64
+                        fsGroupChangePolicy:
+                          description: |-
+                            fsGroupChangePolicy defines behavior of changing ownership and permission of the volume
+                            before being exposed inside Pod. This field will only apply to
+                            volume types which support fsGroup based ownership(and permissions).
+                            It will have no effect on ephemeral volume types such as: secret, configmaps
+                            and emptydir.
+                            Valid values are "OnRootMismatch" and "Always". If not specified, "Always" is used.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: string
+                        runAsGroup:
+                          description: |-
+                            The GID to run the entrypoint of the container process.
+                            Uses runtime default if unset.
+                            May also be set in SecurityContext.  If set in both SecurityContext and
+                            PodSecurityContext, the value specified in SecurityContext takes precedence
+                            for that container.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: integer
+                          format: int64
+                        runAsNonRoot:
+                          description: |-
+                            Indicates that the container must run as a non-root user.
+                            If true, the Kubelet will validate the image at runtime to ensure that it
+                            does not run as UID 0 (root) and fail to start the container if it does.
+                            If unset or false, no such validation will be performed.
+                            May also be set in SecurityContext.  If set in both SecurityContext and
+                            PodSecurityContext, the value specified in SecurityContext takes precedence.
+                          type: boolean
+                        runAsUser:
+                          description: |-
+                            The UID to run the entrypoint of the container process.
+                            Defaults to user specified in image metadata if unspecified.
+                            May also be set in SecurityContext.  If set in both SecurityContext and
+                            PodSecurityContext, the value specified in SecurityContext takes precedence
+                            for that container.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: integer
+                          format: int64
+                        seLinuxOptions:
+                          description: |-
+                            The SELinux context to be applied to all containers.
+                            If unspecified, the container runtime will allocate a random SELinux context for each
+                            container.  May also be set in SecurityContext.  If set in
+                            both SecurityContext and PodSecurityContext, the value specified in SecurityContext
+                            takes precedence for that container.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: object
+                          properties:
+                            level:
+                              description: Level is SELinux level label that applies to the container.
+                              type: string
+                            role:
+                              description: Role is a SELinux role label that applies to the container.
+                              type: string
+                            type:
+                              description: Type is a SELinux type label that applies to the container.
+                              type: string
+                            user:
+                              description: User is a SELinux user label that applies to the container.
+                              type: string
+                        seccompProfile:
+                          description: |-
+                            The seccomp options to use by the containers in this pod.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: object
+                          required:
+                            - type
+                          properties:
+                            localhostProfile:
+                              description: |-
+                                localhostProfile indicates a profile defined in a file on the node should be used.
+                                The profile must be preconfigured on the node to work.
+                                Must be a descending path, relative to the kubelet's configured seccomp profile location.
+                                Must be set if type is "Localhost". Must NOT be set for any other type.
+                              type: string
+                            type:
+                              description: |-
+                                type indicates which kind of seccomp profile will be applied.
+                                Valid options are:
+
+                                Localhost - a profile defined in a file on the node should be used.
+                                RuntimeDefault - the container runtime default profile should be used.
+                                Unconfined - no profile should be applied.
+                              type: string
+                        supplementalGroups:
+                          description: |-
+                            A list of groups applied to the first process run in each container, in
+                            addition to the container's primary GID and fsGroup (if specified).  If
+                            the SupplementalGroupsPolicy feature is enabled, the
+                            supplementalGroupsPolicy field determines whether these are in addition
+                            to or instead of any group memberships defined in the container image.
+                            If unspecified, no additional groups are added, though group memberships
+                            defined in the container image may still be used, depending on the
+                            supplementalGroupsPolicy field.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: array
+                          items:
+                            type: integer
+                            format: int64
+                          x-kubernetes-list-type: atomic
+                        supplementalGroupsPolicy:
+                          description: |-
+                            Defines how supplemental groups of the first container processes are calculated.
+                            Valid values are "Merge" and "Strict". If not specified, "Merge" is used.
+                            (Alpha) Using the field requires the SupplementalGroupsPolicy feature gate to be enabled
+                            and the container runtime must implement support for this feature.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: string
+                        sysctls:
+                          description: |-
+                            Sysctls hold a list of namespaced sysctls used for the pod. Pods with unsupported
+                            sysctls (by the container runtime) might fail to launch.
+                            Note that this field cannot be set when spec.os.name is windows.
+                          type: array
+                          items:
+                            description: Sysctl defines a kernel parameter to be set
+                            type: object
+                            required:
+                              - name
+                              - value
+                            properties:
+                              name:
+                                description: Name of a property to set
+                                type: string
+                              value:
+                                description: Value of a property to set
+                                type: string
+                          x-kubernetes-list-type: atomic
+                        windowsOptions:
+                          description: |-
+                            The Windows specific settings applied to all containers.
+                            If unspecified, the options within a container's SecurityContext will be used.
+                            If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
+                            Note that this field cannot be set when spec.os.name is linux.
+                          type: object
+                          properties:
+                            gmsaCredentialSpec:
+                              description: |-
+                                GMSACredentialSpec is where the GMSA admission webhook
+                                (https://github.com/kubernetes-sigs/windows-gmsa) inlines the contents of the
+                                GMSA credential spec named by the GMSACredentialSpecName field.
+                              type: string
+                            gmsaCredentialSpecName:
+                              description: GMSACredentialSpecName is the name of the GMSA credential spec to use.
+                              type: string
+                            hostProcess:
+                              description: |-
+                                HostProcess determines if a container should be run as a 'Host Process' container.
+                                All of a Pod's containers must have the same effective HostProcess value
+                                (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).
+                                In addition, if HostProcess is true then HostNetwork must also be set to true.
+                              type: boolean
+                            runAsUserName:
+                              description: |-
+                                The UserName in Windows to run the entrypoint of the container process.
+                                Defaults to the user specified in image metadata if unspecified.
+                                May also be set in PodSecurityContext. If set in both SecurityContext and
+                                PodSecurityContext, the value specified in SecurityContext takes precedence.
+                              type: string
                     tolerations:
                       description: If specified, the pod's tolerations.
                       type: array
@@ -3762,6 +4135,8 @@ spec:
                           type: boolean
                         coschedule:
                           type: string
+                        disableAffinityAssistant:
+                          type: boolean
                         disableCredsInit:
                           type: boolean
                         disableInlineSpec:
@@ -3783,9 +4158,6 @@ spec:
                         enableProvenanceInStatus:
                           type: boolean
                         enableStepActions:
-                          description: EnableStepActions is a no-op flag since StepActions are stable
-                          type: boolean
-                        enableWaitExponentialBackoff:
                           type: boolean
                         enforceNonfalsifiability:
                           type: string
@@ -3826,7 +4198,7 @@ spec:
                           description: |-
                             EntryPoint identifies the entry point into the build. This is often a path to a
                             build definition file and/or a target label within that file.
-                            Example: "task/git-clone/0.10/git-clone.yaml"
+                            Example: "task/git-clone/0.8/git-clone.yaml"
                           type: string
                         uri:
                           description: |-
@@ -4017,6 +4389,8 @@ spec:
                                 type: boolean
                               coschedule:
                                 type: string
+                              disableAffinityAssistant:
+                                type: boolean
                               disableCredsInit:
                                 type: boolean
                               disableInlineSpec:
@@ -4038,9 +4412,6 @@ spec:
                               enableProvenanceInStatus:
                                 type: boolean
                               enableStepActions:
-                                description: EnableStepActions is a no-op flag since StepActions are stable
-                                type: boolean
-                              enableWaitExponentialBackoff:
                                 type: boolean
                               enforceNonfalsifiability:
                                 type: string
@@ -4081,7 +4452,7 @@ spec:
                                 description: |-
                                   EntryPoint identifies the entry point into the build. This is often a path to a
                                   build definition file and/or a target label within that file.
-                                  Example: "task/git-clone/0.10/git-clone.yaml"
+                                  Example: "task/git-clone/0.8/git-clone.yaml"
                                 type: string
                               uri:
                                 description: |-
@@ -4556,7 +4927,7 @@ spec:
                                 type: object
                                 properties:
                                   exec:
-                                    description: Exec specifies a command to execute in the container.
+                                    description: Exec specifies the action to take.
                                     type: object
                                     properties:
                                       command:
@@ -4571,7 +4942,7 @@ spec:
                                           type: string
                                         x-kubernetes-list-type: atomic
                                   httpGet:
-                                    description: HTTPGet specifies an HTTP GET request to perform.
+                                    description: HTTPGet specifies the http request to perform.
                                     type: object
                                     required:
                                       - port
@@ -4618,7 +4989,7 @@ spec:
                                           Defaults to HTTP.
                                         type: string
                                   sleep:
-                                    description: Sleep represents a duration that the container should sleep.
+                                    description: Sleep represents the duration that the container should sleep before being terminated.
                                     type: object
                                     required:
                                       - seconds
@@ -4630,8 +5001,8 @@ spec:
                                   tcpSocket:
                                     description: |-
                                       Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept
-                                      for backward compatibility. There is no validation of this field and
-                                      lifecycle hooks will fail at runtime when it is specified.
+                                      for the backward compatibility. There are no validation of this field and
+                                      lifecycle hooks will fail in runtime when tcp handler is specified.
                                     type: object
                                     required:
                                       - port
@@ -4662,7 +5033,7 @@ spec:
                                 type: object
                                 properties:
                                   exec:
-                                    description: Exec specifies a command to execute in the container.
+                                    description: Exec specifies the action to take.
                                     type: object
                                     properties:
                                       command:
@@ -4677,7 +5048,7 @@ spec:
                                           type: string
                                         x-kubernetes-list-type: atomic
                                   httpGet:
-                                    description: HTTPGet specifies an HTTP GET request to perform.
+                                    description: HTTPGet specifies the http request to perform.
                                     type: object
                                     required:
                                       - port
@@ -4724,7 +5095,7 @@ spec:
                                           Defaults to HTTP.
                                         type: string
                                   sleep:
-                                    description: Sleep represents a duration that the container should sleep.
+                                    description: Sleep represents the duration that the container should sleep before being terminated.
                                     type: object
                                     required:
                                       - seconds
@@ -4736,8 +5107,8 @@ spec:
                                   tcpSocket:
                                     description: |-
                                       Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept
-                                      for backward compatibility. There is no validation of this field and
-                                      lifecycle hooks will fail at runtime when it is specified.
+                                      for the backward compatibility. There are no validation of this field and
+                                      lifecycle hooks will fail in runtime when tcp handler is specified.
                                     type: object
                                     required:
                                       - port
@@ -4763,7 +5134,7 @@ spec:
                             type: object
                             properties:
                               exec:
-                                description: Exec specifies a command to execute in the container.
+                                description: Exec specifies the action to take.
                                 type: object
                                 properties:
                                   command:
@@ -4784,7 +5155,7 @@ spec:
                                 type: integer
                                 format: int32
                               grpc:
-                                description: GRPC specifies a GRPC HealthCheckRequest.
+                                description: GRPC specifies an action involving a GRPC port.
                                 type: object
                                 required:
                                   - port
@@ -4802,7 +5173,7 @@ spec:
                                     type: string
                                     default: ""
                               httpGet:
-                                description: HTTPGet specifies an HTTP GET request to perform.
+                                description: HTTPGet specifies the http request to perform.
                                 type: object
                                 required:
                                   - port
@@ -4867,7 +5238,7 @@ spec:
                                 type: integer
                                 format: int32
                               tcpSocket:
-                                description: TCPSocket specifies a connection to a TCP port.
+                                description: TCPSocket specifies an action involving a TCP port.
                                 type: object
                                 required:
                                   - port
@@ -4969,7 +5340,7 @@ spec:
                             type: object
                             properties:
                               exec:
-                                description: Exec specifies a command to execute in the container.
+                                description: Exec specifies the action to take.
                                 type: object
                                 properties:
                                   command:
@@ -4990,7 +5361,7 @@ spec:
                                 type: integer
                                 format: int32
                               grpc:
-                                description: GRPC specifies a GRPC HealthCheckRequest.
+                                description: GRPC specifies an action involving a GRPC port.
                                 type: object
                                 required:
                                   - port
@@ -5008,7 +5379,7 @@ spec:
                                     type: string
                                     default: ""
                               httpGet:
-                                description: HTTPGet specifies an HTTP GET request to perform.
+                                description: HTTPGet specifies the http request to perform.
                                 type: object
                                 required:
                                   - port
@@ -5073,7 +5444,7 @@ spec:
                                 type: integer
                                 format: int32
                               tcpSocket:
-                                description: TCPSocket specifies a connection to a TCP port.
+                                description: TCPSocket specifies an action involving a TCP port.
                                 type: object
                                 required:
                                   - port
@@ -5324,7 +5695,7 @@ spec:
                             type: object
                             properties:
                               exec:
-                                description: Exec specifies a command to execute in the container.
+                                description: Exec specifies the action to take.
                                 type: object
                                 properties:
                                   command:
@@ -5345,7 +5716,7 @@ spec:
                                 type: integer
                                 format: int32
                               grpc:
-                                description: GRPC specifies a GRPC HealthCheckRequest.
+                                description: GRPC specifies an action involving a GRPC port.
                                 type: object
                                 required:
                                   - port
@@ -5363,7 +5734,7 @@ spec:
                                     type: string
                                     default: ""
                               httpGet:
-                                description: HTTPGet specifies an HTTP GET request to perform.
+                                description: HTTPGet specifies the http request to perform.
                                 type: object
                                 required:
                                   - port
@@ -5428,7 +5799,7 @@ spec:
                                 type: integer
                                 format: int32
                               tcpSocket:
-                                description: TCPSocket specifies a connection to a TCP port.
+                                description: TCPSocket specifies an action involving a TCP port.
                                 type: object
                                 required:
                                   - port
@@ -6277,11 +6648,6 @@ spec:
                                     - type: integer
                                     - type: string
                                   x-kubernetes-int-or-string: true
-                          displayName:
-                            description: |-
-                              DisplayName is a user-facing name of the step that may be
-                              used to populate a UI.
-                            type: string
                           env:
                             description: |-
                               List of environment variables to set in the Step.
@@ -6518,12 +6884,17 @@ spec:
                             description: |-
                               Results declares StepResults produced by the Step.
 
+                              This is field is at an ALPHA stability level and gated by "enable-step-actions" feature flag.
+
                               It can be used in an inlined Step when used to store Results to $(step.results.resultName.path).
                               It cannot be used when referencing StepActions using [v1.Step.Ref].
                               The Results declared by the StepActions will be stored here instead.
                             type: array
                             items:
-                              description: StepResult used to describe the Results of a Step.
+                              description: |-
+                                StepResult used to describe the Results of a Step.
+
+                                This is field is at an BETA stability level and gated by "enable-step-actions" feature flag.
                               type: object
                               required:
                                 - name

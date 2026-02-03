@@ -17,14 +17,21 @@ limitations under the License.
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/go-git/go-billy/v5/memfs"
+	"github.com/go-git/go-git/v5"
+	gitcfg "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/jenkins-x/go-scm/scm"
 	"github.com/jenkins-x/go-scm/scm/factory"
 	resolverconfig "github.com/tektoncd/pipeline/pkg/apis/config/resolver"
@@ -122,19 +129,11 @@ func (r *Resolver) Resolve(ctx context.Context, origParams []pipelinev1.Param) (
 		return nil, err
 	}
 
-	g := &GitResolver{
-		Params:     params,
-		Logger:     r.logger,
-		Cache:      r.cache,
-		TTL:        r.ttl,
-		KubeClient: r.kubeClient,
-	}
-
 	if params[UrlParam] != "" {
-		return g.ResolveGitClone(ctx)
+		return ResolveAnonymousGit(ctx, params)
 	}
 
-	return g.ResolveAPIGit(ctx, r.clientFunc)
+	return ResolveAPIGit(ctx, params, r.kubeClient, r.logger, r.cache, r.ttl, r.clientFunc)
 }
 
 func ValidateParams(ctx context.Context, params []pipelinev1.Param) error {
@@ -142,7 +141,8 @@ func ValidateParams(ctx context.Context, params []pipelinev1.Param) error {
 		return errors.New(disabledError)
 	}
 
-	if _, err := PopulateDefaultParams(ctx, params); err != nil {
+	_, err := PopulateDefaultParams(ctx, params)
+	if err != nil {
 		return err
 	}
 	return nil
@@ -157,35 +157,19 @@ func validateRepoURL(url string) bool {
 	return re.MatchString(url)
 }
 
-type GitResolver struct {
-	KubeClient kubernetes.Interface
-	Logger     *zap.SugaredLogger
-	Cache      *cache.LRUExpireCache
-	TTL        time.Duration
-	Params     map[string]string
-
-	// Function variables for mocking in tests
-	ResolveGitCloneFunc func(ctx context.Context) (framework.ResolvedResource, error)
-	ResolveAPIGitFunc   func(ctx context.Context, clientFunc func(string, string, string, ...factory.ClientOptionFunc) (*scm.Client, error)) (framework.ResolvedResource, error)
-}
-
-// ResolveGitClone resolves a git resource using git clone.
-func (g *GitResolver) ResolveGitClone(ctx context.Context) (framework.ResolvedResource, error) {
-	if g.ResolveGitCloneFunc != nil {
-		return g.ResolveGitCloneFunc(ctx)
-	}
-	conf, err := GetScmConfigForParamConfigKey(ctx, g.Params)
+func ResolveAnonymousGit(ctx context.Context, params map[string]string) (framework.ResolvedResource, error) {
+	conf, err := GetScmConfigForParamConfigKey(ctx, params)
 	if err != nil {
 		return nil, err
 	}
-	repoURL := g.Params[UrlParam]
-	if repoURL == "" {
+	repo := params[UrlParam]
+	if repo == "" {
 		urlString := conf.URL
 		if urlString == "" {
 			return nil, errors.New("default Git Repo Url was not set during installation of the git resolver")
 		}
 	}
-	revision := g.Params[RevisionParam]
+	revision := params[RevisionParam]
 	if revision == "" {
 		revisionString := conf.Revision
 		if revisionString == "" {
@@ -193,125 +177,62 @@ func (g *GitResolver) ResolveGitClone(ctx context.Context) (framework.ResolvedRe
 		}
 	}
 
-	var username string
-	var password string
-
-	secretRef := &secretCacheKey{
-		name: g.Params[GitTokenParam],
-		key:  g.Params[GitTokenKeyParam],
+	cloneOpts := &git.CloneOptions{
+		URL: repo,
 	}
-	if secretRef.name != "" {
-		if secretRef.key == "" {
-			secretRef.key = DefaultTokenKeyParam
+	filesystem := memfs.New()
+	repository, err := git.Clone(memory.NewStorage(), filesystem, cloneOpts)
+	if err != nil {
+		return nil, fmt.Errorf("clone error: %w", err)
+	}
+
+	// try fetch the branch when the given revision refers to a branch name
+	refSpec := gitcfg.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/%s", revision, revision))
+	err = repository.Fetch(&git.FetchOptions{
+		RefSpecs: []gitcfg.RefSpec{refSpec},
+	})
+	if err != nil {
+		var fetchErr git.NoMatchingRefSpecError
+		if !errors.As(err, &fetchErr) {
+			return nil, fmt.Errorf("unexpected fetch error: %w", err)
 		}
-		secretRef.ns = common.RequestNamespace(ctx)
-	} else {
-		secretRef = nil
 	}
 
-	if secretRef != nil {
-		gitToken, err := g.getAPIToken(ctx, secretRef, GitTokenKeyParam)
-		if err != nil {
-			return nil, err
-		}
-		username = "git"
-		password = string(gitToken)
-	}
-
-	path := g.Params[PathParam]
-
-	repo, cleanupFunc, err := remote{url: repoURL, username: username, password: password}.clone(ctx)
-	defer cleanupFunc()
+	w, err := repository.Worktree()
 	if err != nil {
-		return nil, fmt.Errorf("error resolving repository: %w", err)
+		return nil, fmt.Errorf("worktree error: %w", err)
 	}
 
-	err = repo.checkout(ctx, revision)
+	h, err := repository.ResolveRevision(plumbing.Revision(revision))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("revision error: %w", err)
 	}
 
-	fullRevision, err := repo.currentRevision(ctx)
+	err = w.Checkout(&git.CheckoutOptions{
+		Hash: *h,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("checkout error: %w", err)
 	}
 
-	fileContents, err := repo.getFileContent(path)
+	path := params[PathParam]
+
+	f, err := filesystem.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("error opening file %q: %w", path, err)
 	}
 
-	return &resolvedGitResource{
-		Revision: fullRevision,
-		Content:  fileContents,
-		URL:      repo.url,
-		Path:     path,
-	}, nil
-}
-
-// ResolveAPIGit resolves a git resource using the SCM API.
-func (g *GitResolver) ResolveAPIGit(ctx context.Context, clientFunc func(string, string, string, ...factory.ClientOptionFunc) (*scm.Client, error)) (framework.ResolvedResource, error) {
-	if g.ResolveAPIGitFunc != nil {
-		return g.ResolveAPIGitFunc(ctx, clientFunc)
-	}
-	// If we got here, the "repo" param was specified, so use the API approach
-	scmType, serverURL, err := getSCMTypeAndServerURL(ctx, g.Params)
+	buf := &bytes.Buffer{}
+	_, err = io.Copy(buf, f)
 	if err != nil {
-		return nil, err
-	}
-	secretRef := &secretCacheKey{
-		name: g.Params[TokenParam],
-		key:  g.Params[TokenKeyParam],
-	}
-	if secretRef.name != "" {
-		if secretRef.key == "" {
-			secretRef.key = DefaultTokenKeyParam
-		}
-		secretRef.ns = common.RequestNamespace(ctx)
-	} else {
-		secretRef = nil
-	}
-	apiToken, err := g.getAPIToken(ctx, secretRef, APISecretNameKey)
-	if err != nil {
-		return nil, err
-	}
-	scmClient, err := clientFunc(scmType, serverURL, string(apiToken))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SCM client: %w", err)
-	}
-
-	orgRepo := fmt.Sprintf("%s/%s", g.Params[OrgParam], g.Params[RepoParam])
-	path := g.Params[PathParam]
-	ref := g.Params[RevisionParam]
-
-	// fetch the actual content from a file in the repo
-	content, _, err := scmClient.Contents.Find(ctx, orgRepo, path, ref)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't fetch resource content: %w", err)
-	}
-	if content == nil || len(content.Data) == 0 {
-		return nil, fmt.Errorf("no content for resource in %s %s", orgRepo, path)
-	}
-
-	// find the actual git commit sha by the ref
-	commit, _, err := scmClient.Git.FindCommit(ctx, orgRepo, ref)
-	if err != nil || commit == nil {
-		return nil, fmt.Errorf("couldn't fetch the commit sha for the ref %s in the repo: %w", ref, err)
-	}
-
-	// fetch the repository URL
-	repo, _, err := scmClient.Repositories.Find(ctx, orgRepo)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't fetch repository: %w", err)
+		return nil, fmt.Errorf("error reading file %q: %w", path, err)
 	}
 
 	return &resolvedGitResource{
-		Content:  content.Data,
-		Revision: commit.Sha,
-		Org:      g.Params[OrgParam],
-		Repo:     g.Params[RepoParam],
-		Path:     content.Path,
-		URL:      repo.Clone,
+		Revision: h.String(),
+		Content:  buf.Bytes(),
+		URL:      params[UrlParam],
+		Path:     params[PathParam],
 	}, nil
 }
 
@@ -466,8 +387,70 @@ type secretCacheKey struct {
 	key  string
 }
 
-func (g *GitResolver) getAPIToken(ctx context.Context, apiSecret *secretCacheKey, key string) ([]byte, error) {
-	conf, err := GetScmConfigForParamConfigKey(ctx, g.Params)
+func ResolveAPIGit(ctx context.Context, params map[string]string, kubeclient kubernetes.Interface, logger *zap.SugaredLogger, cache *cache.LRUExpireCache, ttl time.Duration, clientFunc func(string, string, string, ...factory.ClientOptionFunc) (*scm.Client, error)) (framework.ResolvedResource, error) {
+	// If we got here, the "repo" param was specified, so use the API approach
+	scmType, serverURL, err := getSCMTypeAndServerURL(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	secretRef := &secretCacheKey{
+		name: params[TokenParam],
+		key:  params[TokenKeyParam],
+	}
+	if secretRef.name != "" {
+		if secretRef.key == "" {
+			secretRef.key = DefaultTokenKeyParam
+		}
+		secretRef.ns = common.RequestNamespace(ctx)
+	} else {
+		secretRef = nil
+	}
+	apiToken, err := getAPIToken(ctx, secretRef, kubeclient, logger, cache, ttl, params)
+	if err != nil {
+		return nil, err
+	}
+	scmClient, err := clientFunc(scmType, serverURL, string(apiToken))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SCM client: %w", err)
+	}
+
+	orgRepo := fmt.Sprintf("%s/%s", params[OrgParam], params[RepoParam])
+	path := params[PathParam]
+	ref := params[RevisionParam]
+
+	// fetch the actual content from a file in the repo
+	content, _, err := scmClient.Contents.Find(ctx, orgRepo, path, ref)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch resource content: %w", err)
+	}
+	if content == nil || len(content.Data) == 0 {
+		return nil, fmt.Errorf("no content for resource in %s %s", orgRepo, path)
+	}
+
+	// find the actual git commit sha by the ref
+	commit, _, err := scmClient.Git.FindCommit(ctx, orgRepo, ref)
+	if err != nil || commit == nil {
+		return nil, fmt.Errorf("couldn't fetch the commit sha for the ref %s in the repo: %w", ref, err)
+	}
+
+	// fetch the repository URL
+	repo, _, err := scmClient.Repositories.Find(ctx, orgRepo)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch repository: %w", err)
+	}
+
+	return &resolvedGitResource{
+		Content:  content.Data,
+		Revision: commit.Sha,
+		Org:      params[OrgParam],
+		Repo:     params[RepoParam],
+		Path:     content.Path,
+		URL:      repo.Clone,
+	}, nil
+}
+
+func getAPIToken(ctx context.Context, apiSecret *secretCacheKey, kubeclient kubernetes.Interface, logger *zap.SugaredLogger, cache *cache.LRUExpireCache, ttl time.Duration, params map[string]string) ([]byte, error) {
+	conf, err := GetScmConfigForParamConfigKey(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -484,8 +467,8 @@ func (g *GitResolver) getAPIToken(ctx context.Context, apiSecret *secretCacheKey
 	if apiSecret.name == "" {
 		apiSecret.name = conf.APISecretName
 		if apiSecret.name == "" {
-			err := fmt.Errorf("cannot get API token, required when specifying '%s' param, '%s' not specified in config", RepoParam, key)
-			g.Logger.Info(err)
+			err := fmt.Errorf("cannot get API token, required when specifying '%s' param, '%s' not specified in config", RepoParam, APISecretNameKey)
+			logger.Info(err)
 			return nil, err
 		}
 	}
@@ -493,7 +476,7 @@ func (g *GitResolver) getAPIToken(ctx context.Context, apiSecret *secretCacheKey
 		apiSecret.key = conf.APISecretKey
 		if apiSecret.key == "" {
 			err := fmt.Errorf("cannot get API token, required when specifying '%s' param, '%s' not specified in config", RepoParam, APISecretKeyKey)
-			g.Logger.Info(err)
+			logger.Info(err)
 			return nil, err
 		}
 	}
@@ -505,32 +488,32 @@ func (g *GitResolver) getAPIToken(ctx context.Context, apiSecret *secretCacheKey
 	}
 
 	if cacheSecret {
-		val, ok := g.Cache.Get(apiSecret)
+		val, ok := cache.Get(apiSecret)
 		if ok {
 			return val.([]byte), nil
 		}
 	}
 
-	secret, err := g.KubeClient.CoreV1().Secrets(apiSecret.ns).Get(ctx, apiSecret.name, metav1.GetOptions{})
+	secret, err := kubeclient.CoreV1().Secrets(apiSecret.ns).Get(ctx, apiSecret.name, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			notFoundErr := fmt.Errorf("cannot get API token, secret %s not found in namespace %s", apiSecret.name, apiSecret.ns)
-			g.Logger.Info(notFoundErr)
+			logger.Info(notFoundErr)
 			return nil, notFoundErr
 		}
 		wrappedErr := fmt.Errorf("error reading API token from secret %s in namespace %s: %w", apiSecret.name, apiSecret.ns, err)
-		g.Logger.Info(wrappedErr)
+		logger.Info(wrappedErr)
 		return nil, wrappedErr
 	}
 
 	secretVal, ok := secret.Data[apiSecret.key]
 	if !ok {
 		err := fmt.Errorf("cannot get API token, key %s not found in secret %s in namespace %s", apiSecret.key, apiSecret.name, apiSecret.ns)
-		g.Logger.Info(err)
+		logger.Info(err)
 		return nil, err
 	}
 	if cacheSecret {
-		g.Cache.Add(apiSecret, secretVal, ttl)
+		cache.Add(apiSecret, secretVal, ttl)
 	}
 	return secretVal, nil
 }

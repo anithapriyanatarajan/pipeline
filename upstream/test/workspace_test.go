@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -33,7 +34,7 @@ import (
 )
 
 func TestWorkspaceReadOnlyDisallowsWrite(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -110,7 +111,7 @@ spec:
 }
 
 func TestWorkspacePipelineRunDuplicateWorkspaceEntriesInvalid(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -180,7 +181,7 @@ spec:
 }
 
 func TestWorkspacePipelineRunMissingWorkspaceInvalid(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -250,7 +251,7 @@ spec:
 // randomized volume name matches the workspaces.<name>.volume variable injected into
 // a user's task specs.
 func TestWorkspaceVolumeNameMatchesVolumeVariableReplacement(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)

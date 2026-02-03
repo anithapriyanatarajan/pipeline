@@ -29,7 +29,7 @@ import (
 )
 
 func TestResolveEntrypoints(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

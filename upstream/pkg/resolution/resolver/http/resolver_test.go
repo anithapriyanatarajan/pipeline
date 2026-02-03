@@ -67,7 +67,7 @@ const emptyStr = "empty"
 
 func TestGetSelector(t *testing.T) {
 	resolver := Resolver{}
-	sel := resolver.GetSelector(t.Context())
+	sel := resolver.GetSelector(context.Background())
 	if typ, has := sel[common.LabelKeyResolverType]; !has {
 		t.Fatalf("unexpected selector: %v", sel)
 	} else if typ != LabelValueHttpResolverType {
@@ -481,7 +481,7 @@ func TestResolverReconcileBasicAuth(t *testing.T) {
 
 func TestGetName(t *testing.T) {
 	resolver := Resolver{}
-	ctx := t.Context()
+	ctx := context.Background()
 
 	if d := cmp.Diff(httpResolverName, resolver.GetName(ctx)); d != "" {
 		t.Errorf("invalid name: %s", diff.PrintWantGot(d))

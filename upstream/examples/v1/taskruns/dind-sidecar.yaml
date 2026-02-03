@@ -5,7 +5,7 @@ metadata:
 spec:
   taskSpec:
     steps:
-    - image: mirror.gcr.io/library/docker@sha256:0752ca4e936da012c173c119217c0f9599b3b191c1557e53206d5d06d2627580
+    - image: docker
       name: client
       env:
       # Connect to the sidecar over TCP, with TLS.
@@ -40,7 +40,7 @@ spec:
         name: dind-certs
 
     sidecars:
-    - image: mirror.gcr.io/library/docker@sha256:0752ca4e936da012c173c119217c0f9599b3b191c1557e53206d5d06d2627580
+    - image: docker@sha256:74e78208fc18da48ddf8b569abe21563730845c312130bd0f0b059746a7e10f5
       name: server
       args:
         - --storage-driver=vfs
@@ -61,8 +61,7 @@ spec:
       # Wait for the dind daemon to generate the certs it will share with the
       # client.
       readinessProbe:
-        initialDelaySeconds: 3
-        periodSeconds: 2
+        periodSeconds: 1
         exec:
           command: ['ls', '/certs/client/ca.pem']
 

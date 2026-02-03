@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2020 The Tekton Authors
@@ -53,7 +54,7 @@ var resolverFeatureFlags = requireAllGates(map[string]string{
 // TestTektonBundlesResolver is an integration test which tests a simple, working Tekton bundle using OCI
 // images using the remote resolution bundles resolver.
 func TestTektonBundlesResolver(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	c, namespace := setup(ctx, t, withRegistry, resolverFeatureFlags)
 
 	t.Parallel()
@@ -219,8 +220,7 @@ func publishImg(ctx context.Context, t *testing.T, c *clients, namespace string,
 	}
 
 	// Create a configmap to contain the tarball which we will mount in the pod.
-	// Use a unique name based on the repository to avoid conflicts
-	cmName := namespace + "-" + strings.ReplaceAll(strings.ReplaceAll(ref.String(), "/", "-"), ":", "-") + "-uploadimage-cm"
+	cmName := namespace + "uploadimage-cm"
 	if _, err = c.KubeClient.CoreV1().ConfigMaps(namespace).Create(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: cmName},
 		BinaryData: map[string][]byte{
@@ -247,7 +247,7 @@ func publishImg(ctx context.Context, t *testing.T, c *clients, namespace string,
 			}},
 			InitContainers: []corev1.Container{{
 				Name:    "untar",
-				Image:   "mirror.gcr.io/busybox",
+				Image:   "busybox",
 				Command: []string{"/bin/sh", "-c"},
 				Args:    []string{"mkdir -p /var/image && tar xvf /var/cm/image.tar -C /var/image"},
 				VolumeMounts: []corev1.VolumeMount{{
@@ -260,7 +260,7 @@ func publishImg(ctx context.Context, t *testing.T, c *clients, namespace string,
 			}},
 			Containers: []corev1.Container{{
 				Name:       "skopeo",
-				Image:      "ghcr.io/tektoncd/catalog/upstream/tasks/skopeo-copy:latest",
+				Image:      "gcr.io/tekton-releases/dogfooding/skopeo:latest",
 				WorkingDir: "/var",
 				Command:    []string{"/bin/sh", "-c"},
 				Args:       []string{"skopeo copy --dest-tls-verify=false oci:image docker://" + ref.String()},

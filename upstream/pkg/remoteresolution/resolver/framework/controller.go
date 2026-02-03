@@ -22,7 +22,6 @@ import (
 
 	rrclient "github.com/tektoncd/pipeline/pkg/client/resolution/injection/client"
 	rrinformer "github.com/tektoncd/pipeline/pkg/client/resolution/injection/informers/resolution/v1beta1/resolutionrequest"
-	rrcache "github.com/tektoncd/pipeline/pkg/remoteresolution/resolver/framework/cache"
 	framework "github.com/tektoncd/pipeline/pkg/resolution/resolver/framework"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/clock"
@@ -63,7 +62,6 @@ func NewController(ctx context.Context, resolver Resolver, modifiers ...Reconcil
 		}
 
 		watchConfigChanges(ctx, r, cmw)
-		watchCacheConfigChanges(ctx, r, cmw)
 
 		// TODO(sbwsg): Do better sanitize.
 		resolverName := resolver.GetName(ctx)
@@ -110,19 +108,6 @@ func watchConfigChanges(ctx context.Context, reconciler *Reconciler, cmw configm
 		reconciler.configStore = framework.NewConfigStore(resolverConfigName, logger)
 		reconciler.configStore.WatchConfigs(cmw)
 	}
-}
-
-func watchCacheConfigChanges(ctx context.Context, reconciler *Reconciler, cmw configmap.Watcher) {
-	logger := logging.FromContext(ctx)
-	cacheInstance := rrcache.Get(ctx)
-	cacheConfigName := cacheInstance.GetConfigName(ctx)
-	if cacheConfigName == "" {
-		logger.Error("failed to setup cache config watcher, cache returned empty config name")
-		return
-	}
-
-	cacheConfigStore := rrcache.NewCacheConfigStore(cacheConfigName, logger)
-	cacheConfigStore.WatchConfigs(cmw)
 }
 
 // applyModifiersAndDefaults applies the given modifiers to

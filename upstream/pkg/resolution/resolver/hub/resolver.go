@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"slices"
 	"strings"
 
 	goversion "github.com/hashicorp/go-version"
@@ -45,8 +44,6 @@ const (
 
 	disabledError = "cannot handle resolution request, enable-hub-resolver feature flag not true"
 )
-
-var supportedKinds = []string{"task", "pipeline", "stepaction"}
 
 // Resolver implements a framework.Resolver that can fetch files from OCI bundles.
 //
@@ -362,8 +359,8 @@ func validateParams(ctx context.Context, paramsMap map[string]string, tektonHubU
 		missingParams = append(missingParams, ParamVersion)
 	}
 	if kind, ok := paramsMap[ParamKind]; ok {
-		if !isSupportedKind(kind) {
-			return fmt.Errorf("kind param must be one of: %s", strings.Join(supportedKinds, ", "))
+		if kind != "task" && kind != "pipeline" {
+			return errors.New("kind param must be task or pipeline")
 		}
 	}
 	if hubType, ok := paramsMap[ParamType]; ok {
@@ -441,8 +438,4 @@ func resolveVersionConstraint(ctx context.Context, paramsMap map[string]string, 
 		return nil, fmt.Errorf("no version found for constraint %s", paramsMap[ParamVersion])
 	}
 	return ret, nil
-}
-
-func isSupportedKind(kindValue string) bool {
-	return slices.Contains[[]string, string](supportedKinds, kindValue)
 }

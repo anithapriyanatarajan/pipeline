@@ -35,7 +35,7 @@ import (
 
 func TestGetSelector(t *testing.T) {
 	resolver := Resolver{}
-	sel := resolver.GetSelector(t.Context())
+	sel := resolver.GetSelector(context.Background())
 	if typ, has := sel[resolutioncommon.LabelKeyResolverType]; !has {
 		t.Fatalf("unexpected selector: %v", sel)
 	} else if typ != LabelValueHubResolverType {
@@ -60,16 +60,7 @@ func TestValidate(t *testing.T) {
 			version:      "bar",
 			catalog:      "baz",
 			hubType:      ArtifactHubType,
-		},
-		{
-			testName:     "stepaction validation",
-			kind:         "stepaction",
-			resourceName: "foo",
-			version:      "bar",
-			catalog:      "baz",
-			hubType:      ArtifactHubType,
-		},
-		{
+		}, {
 			testName:     "tekton type validation",
 			kind:         "task",
 			resourceName: "foo",
@@ -143,7 +134,7 @@ func TestValidateConflictingKindName(t *testing.T) {
 		hubType string
 	}{
 		{
-			kind:    "not-taskpipelineorstepaction",
+			kind:    "not-taskpipeline",
 			name:    "foo",
 			version: "bar",
 			catalog: "baz",

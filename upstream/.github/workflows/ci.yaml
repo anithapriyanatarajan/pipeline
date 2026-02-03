@@ -1,6 +1,6 @@
 name: ci
 
-on: [pull_request]
+on: [pull_request] # yamllint disable-line rule:truthy
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull-request.number || github.ref }}
@@ -15,45 +15,12 @@ permissions:
   checks: write # Used to annotate code in the PR
 
 jobs:
-  changes:
-    name: categorize changes
-    runs-on: ubuntu-latest
-    outputs:
-      non-docs: ${{ steps.detect.outputs.non-docs }}
-      yaml: ${{ steps.detect.outputs.yaml }}
-    steps:
-    - name: Get base depth
-      id: base-depth
-      run: echo "base-depth=$(expr ${{ github.event.pull_request.commits }} + 1)" >> $GITHUB_OUTPUT
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-        fetch-depth: ${{ steps.base-depth.outputs.base-depth }}
-    - name: detect
-      id: detect
-      run: |
-        git fetch origin ${{ github.base_ref }}
-        CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | tr ' ' '\n')
-
-        echo -e "Changed files:\n${CHANGED_FILES}"
-
-        # If no files are changed at all, then `grep -v` will match even though no change outputs
-        # should be true. Skipping output on an empty set of changes eliminates the false positive
-        if [[ -n "${CHANGED_FILES}" ]]; then
-          NON_DOCS=$(echo "${CHANGED_FILES}" | grep -Eqv '\.md$' && echo 'true' || echo 'false')
-          YAML=$(echo "${CHANGED_FILES}" | grep -Eq '\.ya?ml$' && echo 'true' || echo 'false')
-          echo "non-docs=${NON_DOCS}" | tee -a $GITHUB_OUTPUT
-          echo "yaml=${YAML}" | tee -a $GITHUB_OUTPUT
-        fi
-
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: ${{ needs.changes.outputs.non-docs == 'true' }}
     steps:
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
-    - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c  # v6.1.0
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+    - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5.4.0
       with:
         go-version-file: "go.mod"
     - name: build
@@ -62,11 +29,9 @@ jobs:
   buildFips:
     name: buildFips
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: ${{ needs.changes.outputs.non-docs == 'true' }}
     steps:
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
-    - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c  # v6.1.0
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+    - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5.4.0
       with:
         go-version-file: "go.mod"
     - name: build
@@ -74,16 +39,15 @@ jobs:
         go build -v -tags "disable_spire,disable_tls" ./cmd/entrypoint
         echo "Build finished with exit code: $?"
   linting:
+    needs: [build]
     name: lint
     runs-on: ubuntu-latest
-    needs: [changes]
     steps:
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
-    - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c  # v6.1.0
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+    - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5.4.0
       with:
         go-version-file: "go.mod"
     - name: gofmt
-      if: ${{ needs.changes.outputs.non-docs == 'true' }}
       run: |
         gofmt_out=$(gofmt -d $(find * -name '*.go' ! -path 'vendor/*' ! -path 'third_party/*'))
         if [[ -n "$gofmt_out" ]]; then
@@ -91,19 +55,16 @@ jobs:
         fi
         echo "$gofmt_out"
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@e7fa5ac41e1cf5b7d48e45e42232ce7ada589601 # v9.1.0
-      if: ${{ needs.changes.outputs.non-docs == 'true' }}
+      uses: golangci/golangci-lint-action@4696ba8babb6127d732c3c6dde519db15edab9ea  # v6.5.1
       with:
-        version: v2.1.6
+        version: v1.64.6
         only-new-issues: true
         args: --timeout=10m
     - name: yamllint
-      if: ${{ needs.changes.outputs.yaml == 'true' }}
       run: |
-        apt-get update && apt-get install -y yamllint
-        make yamllint
+        apt update && apt install -y yamllint
+        yamllint -c .yamllint $(find . -path ./vendor -prune -o -type f -regex ".*y[a]ml" -print | tr '\n' ' ')
     - name: check-license
-      if: ${{ needs.changes.outputs.non-docs == 'true' }}
       run: |
         go install github.com/google/go-licenses@v1.0.0
         go-licenses check ./...
@@ -112,11 +73,11 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
-    - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c  # v6.1.0
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+    - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5.4.0
       with:
         go-version-file: "go.mod"
-    - name: unit-test
+    - name: build
       run: |
         make test-unit-verbose-and-race
   generated:
@@ -124,8 +85,8 @@ jobs:
     name: Check generated code
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
-    - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c  # v6.1.0
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+    - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5.4.0
       with:
         go-version-file: "go.mod"
     - name: generated
@@ -136,14 +97,25 @@ jobs:
     name: Multi-arch build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
-    - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c  # v6.1.0
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+    - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5.4.0
       with:
         go-version-file: "go.mod"
-    - uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079944c8d # v0.9
+    - uses: ko-build/setup-ko@v0.8
     - name: ko-resolve
       run: |
-          # Use the repository's .ko.yaml for consistent base images
+          cat <<EOF > .ko.yaml
+          defaultBaseImage: cgr.dev/chainguard/static
+          baseImageOverrides:
+            # Use the combined base image for images that should include Windows support.
+            # NOTE: Make sure this list of images to use the combined base image is in sync with what's in tekton/publish.yaml's 'create-ko-yaml' Task.
+            github.com/tektoncd/pipeline/cmd/entrypoint: ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/combined-base-image:latest
+            github.com/tektoncd/pipeline/cmd/nop: ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/combined-base-image:latest
+            github.com/tektoncd/pipeline/cmd/workingdirinit: ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/combined-base-image:latest
+
+            github.com/tektoncd/pipeline/cmd/git-init: cgr.dev/chainguard/git
+          EOF
+
           KO_DOCKER_REPO=example.com ko resolve -l 'app.kubernetes.io/component!=resolvers' --platform=all --push=false -R -f config 1>/dev/null
           KO_DOCKER_REPO=example.com ko resolve --platform=all --push=false -f config/resolvers 1>/dev/null
   e2e-tests:

@@ -29,6 +29,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/bundle/spiffebundle"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
+	"github.com/stretchr/testify/assert"
 	"github.com/tektoncd/pipeline/pkg/spire/test"
 	"github.com/tektoncd/pipeline/pkg/spire/test/x509util"
 )
@@ -81,9 +82,7 @@ func New(tb testing.TB, option ...ServerOption) *Server {
 
 func (s *Server) Shutdown() {
 	err := s.httpServer.Shutdown(context.Background())
-	if err != nil {
-		s.tb.Errorf("unexpected error: %v", err)
-	}
+	assert.NoError(s.tb, err)
 	s.wg.Wait()
 }
 
@@ -110,9 +109,7 @@ func (s *Server) start() error {
 	s.wg.Add(1)
 	go func() {
 		err := s.httpServer.ServeTLS(ln, "", "")
-		if err != nil || err.Error() != http.ErrServerClosed.Error() {
-			s.tb.Errorf("expected error %q, got %v", http.ErrServerClosed.Error(), err)
-		}
+		assert.EqualError(s.tb, err, http.ErrServerClosed.Error())
 		s.wg.Done()
 		ln.Close()
 	}()
@@ -126,18 +123,12 @@ func (s *Server) testbundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	bb, err := s.bundles[0].Marshal()
-	if err != nil {
-		s.tb.Errorf("unexpected error: %v", err)
-	}
+	assert.NoError(s.tb, err)
 	s.bundles = s.bundles[1:]
 	w.Header().Add("Content-Type", "application/json")
 	b, err := w.Write(bb)
-	if err != nil {
-		s.tb.Errorf("unexpected error: %v", err)
-	}
-	if len(bb) != b {
-		s.tb.Errorf("expected written bytes %d, got %d", len(bb), b)
-	}
+	assert.NoError(s.tb, err)
+	assert.Equal(s.tb, len(bb), b)
 }
 
 type serverOption func(*Server)

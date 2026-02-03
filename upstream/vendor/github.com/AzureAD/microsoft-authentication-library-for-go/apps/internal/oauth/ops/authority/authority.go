@@ -380,9 +380,8 @@ func NewInfoFromAuthorityURI(authority string, validateAuthority bool, instanceD
 		return Info{}, errors.New(`authority must be an URL such as "https://login.microsoftonline.com/<your tenant>"`)
 	}
 
-	authorityType := AAD
-	tenant := pathParts[1]
-	switch tenant {
+	var authorityType, tenant string
+	switch pathParts[1] {
 	case "adfs":
 		authorityType = ADFS
 	case "dstsv2":
@@ -394,6 +393,9 @@ func NewInfoFromAuthorityURI(authority string, validateAuthority bool, instanceD
 		}
 		authorityType = DSTS
 		tenant = DSTSTenant
+	default:
+		authorityType = AAD
+		tenant = pathParts[1]
 	}
 
 	// u.Host includes the port, if any, which is required for private cloud deployments

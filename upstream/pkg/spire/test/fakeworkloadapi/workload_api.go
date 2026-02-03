@@ -30,6 +30,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/proto/spiffe/workload"
 	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tektoncd/pipeline/pkg/spire/test/pemutil"
 	"github.com/tektoncd/pipeline/pkg/spire/test/x509util"
 	"google.golang.org/grpc"
@@ -65,9 +67,7 @@ func New(tb testing.TB) *WorkloadAPI {
 	}
 
 	listener, err := newListener()
-	if err != nil {
-		tb.Fatalf("failed to create listener: %v", err)
-	}
+	require.NoError(tb, err)
 
 	server := grpc.NewServer()
 	workload.RegisterSpiffeWorkloadAPIServer(server, &workloadAPIWrapper{w: w})
@@ -127,9 +127,7 @@ func (w *WorkloadAPI) SetJWTBundles(jwtBundles ...*jwtbundle.Bundle) {
 	}
 	for _, bundle := range jwtBundles {
 		bundleBytes, err := bundle.Marshal()
-		if err != nil {
-			w.tb.Fatalf("failed to marshal JWT bundle: %v", err)
-		}
+		assert.NoError(w.tb, err)
 		resp.Bundles[bundle.TrustDomain().String()] = bundleBytes
 	}
 
@@ -153,13 +151,9 @@ func (w *WorkloadAPI) SetX509Bundles(x509Bundles ...*x509bundle.Bundle) {
 	}
 	for _, bundle := range x509Bundles {
 		bundleBytes, err := bundle.Marshal()
-		if err != nil {
-			w.tb.Fatalf("failed to marshal X509 bundle: %v", err)
-		}
+		assert.NoError(w.tb, err)
 		bundlePem, err := pemutil.ParseCertificates(bundleBytes)
-		if err != nil {
-			w.tb.Fatalf("failed to parse certificates: %v", err)
-		}
+		assert.NoError(w.tb, err)
 
 		var rawBytes []byte
 		for _, c := range bundlePem {
@@ -228,9 +222,7 @@ func (r *X509SVIDResponse) ToProto(tb testing.TB) *workload.X509SVIDResponse {
 		if svid.PrivateKey != nil {
 			var err error
 			keyDER, err = x509.MarshalPKCS8PrivateKey(svid.PrivateKey)
-			if err != nil {
-				tb.Fatalf("failed to marshal private key: %v", err)
-			}
+			require.NoError(tb, err)
 		}
 		pb.Svids = append(pb.Svids, &workload.X509SVID{
 			SpiffeId:    svid.ID.String(),
@@ -389,9 +381,7 @@ func (w *WorkloadAPI) validateJWTSVID(_ context.Context, req *workload.ValidateJ
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	claims, err := structFromValues(jwtSvid.Claims)
-	if err != nil {
-		w.tb.Fatalf("failed to convert claims to Struct: %v", err)
-	}
+	require.NoError(w.tb, err)
 
 	return &workload.ValidateJWTSVIDResponse{
 		SpiffeId: jwtSvid.ID.String(),

@@ -22,8 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"errors"
-
+	"github.com/hashicorp/go-multierror"
 	pipelineErrors "github.com/tektoncd/pipeline/pkg/apis/pipeline/errors"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/list"
@@ -234,35 +233,35 @@ func validateTaskSpecRequestResources(taskSpec *v1.TaskSpec) error {
 func validateOverrides(ts *v1.TaskSpec, trs *v1.TaskRunSpec) error {
 	stepErr := validateStepOverrides(ts, trs)
 	sidecarErr := validateSidecarOverrides(ts, trs)
-	return errors.Join(stepErr, sidecarErr)
+	return multierror.Append(stepErr, sidecarErr).ErrorOrNil()
 }
 
 func validateStepOverrides(ts *v1.TaskSpec, trs *v1.TaskRunSpec) error {
-	var errs []error
+	var err error
 	stepNames := sets.NewString()
 	for _, step := range ts.Steps {
 		stepNames.Insert(step.Name)
 	}
 	for _, stepOverride := range trs.StepSpecs {
 		if !stepNames.Has(stepOverride.Name) {
-			errs = append(errs, pipelineErrors.WrapUserError(fmt.Errorf("invalid StepOverride: No Step named %s", stepOverride.Name)))
+			err = multierror.Append(err, pipelineErrors.WrapUserError(fmt.Errorf("invalid StepOverride: No Step named %s", stepOverride.Name)))
 		}
 	}
-	return errors.Join(errs...)
+	return err
 }
 
 func validateSidecarOverrides(ts *v1.TaskSpec, trs *v1.TaskRunSpec) error {
-	var errs []error
+	var err error
 	sidecarNames := sets.NewString()
 	for _, sidecar := range ts.Sidecars {
 		sidecarNames.Insert(sidecar.Name)
 	}
 	for _, sidecarOverride := range trs.SidecarSpecs {
 		if !sidecarNames.Has(sidecarOverride.Name) {
-			errs = append(errs, pipelineErrors.WrapUserError(fmt.Errorf("invalid SidecarOverride: No Sidecar named %s", sidecarOverride.Name)))
+			err = multierror.Append(err, pipelineErrors.WrapUserError(fmt.Errorf("invalid SidecarOverride: No Sidecar named %s", sidecarOverride.Name)))
 		}
 	}
-	return errors.Join(errs...)
+	return err
 }
 
 // validateResults checks the emitted results type and object properties against the ones defined in spec.

@@ -349,7 +349,7 @@ func TestCheckTamper(t *testing.T) {
 }
 
 func TestNoSVID(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	cfg := &config.SpireConfig{SocketPath: "tcp://127.0.0.1:12345"} // bogus SocketPath
 	ec := NewEntrypointerAPIClient(cfg)
 	defer ec.Close()
@@ -632,7 +632,7 @@ func TestTaskRunResultsSignTamper(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		ctx := t.Context()
+		ctx := context.Background()
 		for _, tr := range testTaskRuns() {
 			t.Run(tt.desc+" "+tr.ObjectMeta.Name, func(t *testing.T) {
 				results := []result.RunResult{{

@@ -47,13 +47,12 @@ const (
 	// associated with
 	ClusterResolverName string = "Cluster"
 
-	ConfigMapName = "cluster-resolver-config"
+	configMapName = "cluster-resolver-config"
 )
 
-var supportedKinds = []string{"task", "pipeline", "stepaction"}
+var _ framework.Resolver = &Resolver{}
 
-var _ framework.Resolver = (*Resolver)(nil)
-var _ framework.ConfigWatcher = (*Resolver)(nil)
+var supportedKinds = []string{"task", "pipeline", "stepaction"}
 
 // Resolver implements a framework.Resolver that can fetch resources from other namespaces.
 //
@@ -80,11 +79,6 @@ func (r *Resolver) GetSelector(_ context.Context) map[string]string {
 	return map[string]string{
 		common.LabelKeyResolverType: LabelValueClusterResolverType,
 	}
-}
-
-// GetConfigName returns the name of the cluster resolver's configmap.
-func (r *Resolver) GetConfigName(context.Context) string {
-	return ConfigMapName
 }
 
 // ValidateParams returns an error if the given parameter map is not
@@ -162,6 +156,13 @@ func ResolveFromParams(ctx context.Context, origParams []pipelinev1.Param, pipel
 		Identifier: fmt.Sprintf("/apis/%s/namespaces/%s/%s/%s@%s", groupVersion, params[NamespaceParam], params[KindParam], params[NameParam], uid),
 		Checksum:   sha256Checksum,
 	}, nil
+}
+
+var _ framework.ConfigWatcher = &Resolver{}
+
+// GetConfigName returns the name of the cluster resolver's configmap.
+func (r *Resolver) GetConfigName(context.Context) string {
+	return configMapName
 }
 
 // ResolvedClusterResource implements framework.ResolvedResource and returns

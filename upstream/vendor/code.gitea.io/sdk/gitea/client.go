@@ -18,7 +18,7 @@ import (
 	"strings"
 	"sync"
 
-	version "github.com/hashicorp/go-version"
+	"github.com/hashicorp/go-version"
 )
 
 var jsonHeader = http.Header{"content-type": []string{"application/json"}}

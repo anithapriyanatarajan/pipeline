@@ -17,6 +17,7 @@ limitations under the License.
 package v1_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -265,7 +266,7 @@ func TestPipelineRunIsTimeoutConditionSet(t *testing.T) {
 }
 
 func TestPipelineRunSetTimeoutCondition(t *testing.T) {
-	ctx := config.ToContext(t.Context(), &config.Config{
+	ctx := config.ToContext(context.Background(), &config.Config{
 		Defaults: &config.Defaults{
 			DefaultTimeoutMinutes: 120,
 		},
@@ -354,7 +355,7 @@ func TestPipelineRunHasTimedOutForALongTime(t *testing.T) {
 				}},
 			}
 
-			if pr.HasTimedOutForALongTime(t.Context(), testClock) != tc.expected {
+			if pr.HasTimedOutForALongTime(context.Background(), testClock) != tc.expected {
 				t.Errorf("Expected HasTimedOut to be %t when using pipeline.timeouts.pipeline", tc.expected)
 			}
 		})
@@ -397,7 +398,7 @@ func TestPipelineRunHasTimedOut(t *testing.T) {
 				}},
 			}
 
-			if pr.HasTimedOut(t.Context(), testClock) != tc.expected {
+			if pr.HasTimedOut(context.Background(), testClock) != tc.expected {
 				t.Errorf("Expected HasTimedOut to be %t when using pipeline.timeouts.pipeline", tc.expected)
 			}
 		})
@@ -412,7 +413,7 @@ func TestPipelineRunHasTimedOut(t *testing.T) {
 				}},
 			}
 
-			if pr.HaveTasksTimedOut(t.Context(), testClock) != tc.expected {
+			if pr.HaveTasksTimedOut(context.Background(), testClock) != tc.expected {
 				t.Errorf("Expected HasTimedOut to be %t when using pipeline.timeouts.pipeline", tc.expected)
 			}
 		})
@@ -428,7 +429,7 @@ func TestPipelineRunHasTimedOut(t *testing.T) {
 				}},
 			}
 
-			if pr.HasFinallyTimedOut(t.Context(), testClock) != tc.expected {
+			if pr.HasFinallyTimedOut(context.Background(), testClock) != tc.expected {
 				t.Errorf("Expected HasTimedOut to be %t when using pipeline.timeouts.pipeline", tc.expected)
 			}
 		})
@@ -777,86 +778,6 @@ func TestPipelineRunMarkFailedCondition(t *testing.T) {
 
 			if d := cmp.Diff(tc.expectedConditions, updatedCondition, cmpopts.IgnoreFields(apis.Condition{}, "LastTransitionTime")); d != "" {
 				t.Error(diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
-func TestPipelineRunIsSuccessful(t *testing.T) {
-	tcs := []struct {
-		name        string
-		pipelineRun *v1.PipelineRun
-		want        bool
-	}{{
-		name: "nil pipelinerun",
-		want: false,
-	}, {
-		name: "still running",
-		pipelineRun: &v1.PipelineRun{Status: v1.PipelineRunStatus{Status: duckv1.Status{Conditions: []apis.Condition{{
-			Type:   apis.ConditionSucceeded,
-			Status: corev1.ConditionUnknown,
-		}}}}},
-		want: false,
-	}, {
-		name: "succeeded",
-		pipelineRun: &v1.PipelineRun{Status: v1.PipelineRunStatus{Status: duckv1.Status{Conditions: []apis.Condition{{
-			Type:   apis.ConditionSucceeded,
-			Status: corev1.ConditionTrue,
-		}}}}},
-		want: true,
-	}, {
-		name: "failed",
-		pipelineRun: &v1.PipelineRun{Status: v1.PipelineRunStatus{Status: duckv1.Status{Conditions: []apis.Condition{{
-			Type:   apis.ConditionSucceeded,
-			Status: corev1.ConditionFalse,
-		}}}}},
-		want: false,
-	}}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			got := tc.pipelineRun.IsSuccessful()
-			if tc.want != got {
-				t.Errorf("wanted IsSuccessful to be %t but was %t", tc.want, got)
-			}
-		})
-	}
-}
-
-func TestPipelineRunIsFailure(t *testing.T) {
-	tcs := []struct {
-		name        string
-		pipelineRun *v1.PipelineRun
-		want        bool
-	}{{
-		name: "nil pipelinerun",
-		want: false,
-	}, {
-		name: "still running",
-		pipelineRun: &v1.PipelineRun{Status: v1.PipelineRunStatus{Status: duckv1.Status{Conditions: []apis.Condition{{
-			Type:   apis.ConditionSucceeded,
-			Status: corev1.ConditionUnknown,
-		}}}}},
-		want: false,
-	}, {
-		name: "succeeded",
-		pipelineRun: &v1.PipelineRun{Status: v1.PipelineRunStatus{Status: duckv1.Status{Conditions: []apis.Condition{{
-			Type:   apis.ConditionSucceeded,
-			Status: corev1.ConditionTrue,
-		}}}}},
-		want: false,
-	}, {
-		name: "failed",
-		pipelineRun: &v1.PipelineRun{Status: v1.PipelineRunStatus{Status: duckv1.Status{Conditions: []apis.Condition{{
-			Type:   apis.ConditionSucceeded,
-			Status: corev1.ConditionFalse,
-		}}}}},
-		want: true,
-	}}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			got := tc.pipelineRun.IsFailure()
-			if tc.want != got {
-				t.Errorf("wanted IsFailure to be %t but was %t", tc.want, got)
 			}
 		})
 	}

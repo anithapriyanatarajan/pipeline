@@ -56,6 +56,7 @@ var types = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
 	// v1beta1
 	v1beta1.SchemeGroupVersion.WithKind("Pipeline"):    &v1beta1.Pipeline{},
 	v1beta1.SchemeGroupVersion.WithKind("Task"):        &v1beta1.Task{},
+	v1beta1.SchemeGroupVersion.WithKind("ClusterTask"): &v1beta1.ClusterTask{},
 	v1beta1.SchemeGroupVersion.WithKind("TaskRun"):     &v1beta1.TaskRun{},
 	v1beta1.SchemeGroupVersion.WithKind("PipelineRun"): &v1beta1.PipelineRun{},
 	v1beta1.SchemeGroupVersion.WithKind("CustomRun"):   &v1beta1.CustomRun{},
@@ -244,12 +245,6 @@ func main() {
 		webhookName = "webhook.pipeline.tekton.dev"
 	}
 
-	var statsReporterOptions []webhook.StatsReporterOption
-	enableNamespace := os.Getenv("WEBHOOK_METRICS_ENABLE_NAMESPACE")
-	if enableNamespace != "true" {
-		statsReporterOptions = append(statsReporterOptions, webhook.WithoutTags("resource_namespace"))
-	}
-
 	// Scope informers to the webhook's namespace instead of cluster-wide
 	ctx := injection.WithNamespaceScope(signals.NewContext(), system.Namespace())
 
@@ -258,8 +253,6 @@ func main() {
 		ServiceName: serviceName,
 		Port:        webhook.PortFromEnv(8443),
 		SecretName:  secretName,
-
-		StatsReporterOptions: statsReporterOptions,
 	})
 
 	mux := http.NewServeMux()

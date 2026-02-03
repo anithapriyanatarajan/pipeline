@@ -18,6 +18,7 @@ package trustedresources
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/elliptic"
 	"crypto/sha256"
@@ -269,7 +270,7 @@ func TestVerifyResource_Task_Success(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := test.SetupTrustedResourceConfig(t.Context(), tc.verificationNoMatchPolicy)
+			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
 			vr := VerifyResource(ctx, tc.task, k8sclient, tc.source, tc.verificationPolicies)
 			if tc.expectedVerificationResult.VerificationResultType != vr.VerificationResultType && errors.Is(vr.Err, tc.expectedVerificationResult.Err) {
 				t.Errorf("VerificationResult mismatch: want %v, got %v", tc.expectedVerificationResult, vr)
@@ -279,7 +280,7 @@ func TestVerifyResource_Task_Success(t *testing.T) {
 }
 
 func TestVerifyResource_Task_Error(t *testing.T) {
-	ctx := logging.WithLogger(t.Context(), zaptest.NewLogger(t).Sugar())
+	ctx := logging.WithLogger(context.Background(), zaptest.NewLogger(t).Sugar())
 	ctx = test.SetupTrustedResourceConfig(ctx, config.FailNoMatchPolicy)
 	sv, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 
@@ -420,7 +421,7 @@ func TestVerifyResource_Pipeline_Success(t *testing.T) {
 	}}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := test.SetupTrustedResourceConfig(t.Context(), tc.verificationNoMatchPolicy)
+			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
 			vr := VerifyResource(ctx, tc.pipeline, k8sclient, tc.source, vps)
 			if tc.expectedVerificationResult.VerificationResultType != vr.VerificationResultType && errors.Is(vr.Err, tc.expectedVerificationResult.Err) {
 				t.Errorf("VerificationResult mismatch: want %v, got %v", tc.expectedVerificationResult, vr)
@@ -430,7 +431,7 @@ func TestVerifyResource_Pipeline_Success(t *testing.T) {
 }
 
 func TestVerifyResource_Pipeline_Error(t *testing.T) {
-	ctx := logging.WithLogger(t.Context(), zaptest.NewLogger(t).Sugar())
+	ctx := logging.WithLogger(context.Background(), zaptest.NewLogger(t).Sugar())
 	ctx = test.SetupTrustedResourceConfig(ctx, config.FailNoMatchPolicy)
 	sv, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 
@@ -497,7 +498,7 @@ func TestVerifyResource_V1Task_Success(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	vr := VerifyResource(t.Context(), signedTask, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
+	vr := VerifyResource(context.Background(), signedTask, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
 	if vr.VerificationResultType != VerificationPass {
 		t.Errorf("VerificationResult mismatch: want %v, got %v", VerificationPass, vr.VerificationResultType)
 	}
@@ -511,7 +512,7 @@ func TestVerifyResource_V1Task_Error(t *testing.T) {
 	}
 	modifiedTask := signedTask.DeepCopy()
 	modifiedTask.Annotations["foo"] = "modified"
-	vr := VerifyResource(t.Context(), modifiedTask, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
+	vr := VerifyResource(context.Background(), modifiedTask, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
 	if vr.VerificationResultType != VerificationError && !errors.Is(vr.Err, ErrResourceVerificationFailed) {
 		t.Errorf("VerificationResult mismatch: want %v, got %v", VerificationResult{VerificationResultType: VerificationError, Err: ErrResourceVerificationFailed}, vr)
 	}
@@ -523,7 +524,7 @@ func TestVerifyResource_V1Pipeline_Success(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	vr := VerifyResource(t.Context(), signed, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
+	vr := VerifyResource(context.Background(), signed, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
 	if vr.VerificationResultType != VerificationPass {
 		t.Errorf("VerificationResult mismatch: want %v, got %v", VerificationPass, vr.VerificationResultType)
 	}
@@ -537,9 +538,19 @@ func TestVerifyResource_V1Pipeline_Error(t *testing.T) {
 	}
 	modifiedTask := signed.DeepCopy()
 	modifiedTask.Annotations["foo"] = "modified"
-	vr := VerifyResource(t.Context(), modifiedTask, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
+	vr := VerifyResource(context.Background(), modifiedTask, k8sclient, &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}, vps)
 	if vr.VerificationResultType != VerificationError && !errors.Is(vr.Err, ErrResourceVerificationFailed) {
 		t.Errorf("VerificationResult mismatch: want %v, got %v", VerificationResult{VerificationResultType: VerificationError, Err: ErrResourceVerificationFailed}, vr)
+	}
+}
+
+func TestVerifyResource_TypeNotSupported(t *testing.T) {
+	resource := v1beta1.ClusterTask{}
+	refSource := &v1.RefSource{URI: "git+https://github.com/tektoncd/catalog.git"}
+	_, _, k8sclient, vps := test.SetupVerificationPolicies(t)
+	vr := VerifyResource(context.Background(), &resource, k8sclient, refSource, vps)
+	if !errors.Is(vr.Err, ErrResourceNotSupported) {
+		t.Errorf("want:%v got:%v ", ErrResourceNotSupported, vr.Err)
 	}
 }
 

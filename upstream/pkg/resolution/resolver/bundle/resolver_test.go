@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +55,7 @@ const (
 
 func TestGetSelector(t *testing.T) {
 	resolver := bundle.Resolver{}
-	sel := resolver.GetSelector(t.Context())
+	sel := resolver.GetSelector(context.Background())
 	if typ, has := sel[common.LabelKeyResolverType]; !has {
 		t.Fatalf("unexpected selector: %v", sel)
 	} else if typ != bundle.LabelValueBundleResolverType {
@@ -69,7 +68,7 @@ func TestValidateParamsSecret(t *testing.T) {
 	config := map[string]string{
 		bundle.ConfigServiceAccount: "default",
 	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
+	ctx := framework.InjectResolverConfigToContext(context.Background(), config)
 
 	paramsWithTask := []pipelinev1.Param{{
 		Name:  bundle.ParamKind,
@@ -112,7 +111,7 @@ func TestValidateParamsServiceAccount(t *testing.T) {
 	config := map[string]string{
 		bundle.ConfigServiceAccount: "default",
 	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
+	ctx := framework.InjectResolverConfigToContext(context.Background(), config)
 
 	paramsWithTask := []pipelinev1.Param{{
 		Name:  bundle.ParamKind,
@@ -128,7 +127,7 @@ func TestValidateParamsServiceAccount(t *testing.T) {
 		Value: *pipelinev1.NewStructuredValues("baz"),
 	}}
 
-	if err := resolver.ValidateParams(t.Context(), paramsWithTask); err != nil {
+	if err := resolver.ValidateParams(context.Background(), paramsWithTask); err != nil {
 		t.Fatalf("unexpected error validating params: %v", err)
 	}
 
@@ -212,7 +211,7 @@ func TestValidateParamsMissing(t *testing.T) {
 		Name:  bundle.ParamImagePullSecret,
 		Value: *pipelinev1.NewStructuredValues("baz"),
 	}}
-	err = resolver.ValidateParams(t.Context(), paramsMissingBundle)
+	err = resolver.ValidateParams(context.Background(), paramsMissingBundle)
 	if err == nil {
 		t.Fatalf("expected missing kind err")
 	}
@@ -227,7 +226,7 @@ func TestValidateParamsMissing(t *testing.T) {
 		Name:  bundle.ParamImagePullSecret,
 		Value: *pipelinev1.NewStructuredValues("baz"),
 	}}
-	err = resolver.ValidateParams(t.Context(), paramsMissingName)
+	err = resolver.ValidateParams(context.Background(), paramsMissingName)
 	if err == nil {
 		t.Fatalf("expected missing name err")
 	}
@@ -716,7 +715,7 @@ func pushToRegistry(t *testing.T, registry, imageName string, data []runtime.Obj
 func TestGetResolutionTimeoutDefault(t *testing.T) {
 	resolver := bundle.Resolver{}
 	defaultTimeout := 30 * time.Minute
-	timeout, err := resolver.GetResolutionTimeout(t.Context(), defaultTimeout, map[string]string{})
+	timeout, err := resolver.GetResolutionTimeout(context.Background(), defaultTimeout, map[string]string{})
 	if err != nil {
 		t.Fatalf("couldn't get default-timeout: %v", err)
 	}
@@ -732,50 +731,12 @@ func TestGetResolutionTimeoutCustom(t *testing.T) {
 	config := map[string]string{
 		bundle.ConfigTimeoutKey: configTimeout.String(),
 	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
+	ctx := framework.InjectResolverConfigToContext(context.Background(), config)
 	timeout, err := resolver.GetResolutionTimeout(ctx, defaultTimeout, map[string]string{})
 	if err != nil {
 		t.Fatalf("couldn't get default-timeout: %v", err)
 	}
 	if timeout != configTimeout {
 		t.Fatalf("expected timeout from config to be returned")
-	}
-}
-
-func TestGetResolutionBackoffCustom(t *testing.T) {
-	// resolver := bundle.Resolver{}
-	// defaultTimeout := 30 * time.Minute
-	configBackoffDuration := 7.0 * time.Second
-	configBackoffFactor := 7.0
-	configBackoffJitter := 0.5
-	configBackoffSteps := 3
-	configBackoffCap := 20 * time.Second
-	config := map[string]string{
-		bundle.ConfigBackoffDuration: configBackoffDuration.String(),
-		bundle.ConfigBackoffFactor:   strconv.FormatFloat(configBackoffFactor, 'f', -1, 64),
-		bundle.ConfigBackoffJitter:   strconv.FormatFloat(configBackoffJitter, 'f', -1, 64),
-		bundle.ConfigBackoffSteps:    strconv.Itoa(configBackoffSteps),
-		bundle.ConfigBackoffCap:      configBackoffCap.String(),
-	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
-	backoffConfig, err := bundle.GetBundleResolverBackoff(ctx)
-	// timeout, err := resolver.GetResolutionTimeout(ctx, defaultTimeout, map[string]string{})
-	if err != nil {
-		t.Fatalf("couldn't get backoff config: %v", err)
-	}
-	if backoffConfig.Duration != configBackoffDuration {
-		t.Fatalf("expected duration from config to be returned")
-	}
-	if backoffConfig.Factor != configBackoffFactor {
-		t.Fatalf("expected backoff from config to be returned")
-	}
-	if backoffConfig.Jitter != configBackoffJitter {
-		t.Fatalf("expected jitter from config to be returned")
-	}
-	if backoffConfig.Steps != configBackoffSteps {
-		t.Fatalf("expected steps from config to be returned")
-	}
-	if backoffConfig.Cap != configBackoffCap {
-		t.Fatalf("expected steps from config to be returned")
 	}
 }

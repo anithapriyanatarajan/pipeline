@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	version "github.com/hashicorp/go-version"
+	"github.com/hashicorp/go-version"
 )
 
 // ServerVersion returns the version of the server

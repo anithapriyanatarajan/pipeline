@@ -311,7 +311,8 @@ spec:
                             description: |-
                               TaskKind indicates the Kind of the Task:
                               1. Namespaced Task when Kind is set to "Task". If Kind is "", it defaults to "Task".
-                              2. Custom Task when Kind is non-empty and APIVersion is non-empty
+                              2. Cluster-Scoped Task when Kind is set to "ClusterTask"
+                              3. Custom Task when Kind is non-empty and APIVersion is non-empty
                             type: string
                           name:
                             description: 'Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names'
@@ -349,7 +350,7 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                       timeout:
                         description: |-
-                          Duration after which the TaskRun times out. Defaults to 1 hour.
+                          Time after which the TaskRun times out. Defaults to 1 hour.
                           Refer Go's ParseDuration documentation for expected format: https://golang.org/pkg/time/#ParseDuration
                         type: string
                       when:
@@ -756,7 +757,8 @@ spec:
                             description: |-
                               TaskKind indicates the Kind of the Task:
                               1. Namespaced Task when Kind is set to "Task". If Kind is "", it defaults to "Task".
-                              2. Custom Task when Kind is non-empty and APIVersion is non-empty
+                              2. Cluster-Scoped Task when Kind is set to "ClusterTask"
+                              3. Custom Task when Kind is non-empty and APIVersion is non-empty
                             type: string
                           name:
                             description: 'Name of the referent; More info: http://kubernetes.io/docs/user-guide/identifiers#names'
@@ -794,7 +796,7 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                       timeout:
                         description: |-
-                          Duration after which the TaskRun times out. Defaults to 1 hour.
+                          Time after which the TaskRun times out. Defaults to 1 hour.
                           Refer Go's ParseDuration documentation for expected format: https://golang.org/pkg/time/#ParseDuration
                         type: string
                       when:
@@ -1126,7 +1128,7 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                       timeout:
                         description: |-
-                          Duration after which the TaskRun times out. Defaults to 1 hour.
+                          Time after which the TaskRun times out. Defaults to 1 hour.
                           Refer Go's ParseDuration documentation for expected format: https://golang.org/pkg/time/#ParseDuration
                         type: string
                       when:
@@ -1465,7 +1467,7 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                       timeout:
                         description: |-
-                          Duration after which the TaskRun times out. Defaults to 1 hour.
+                          Time after which the TaskRun times out. Defaults to 1 hour.
                           Refer Go's ParseDuration documentation for expected format: https://golang.org/pkg/time/#ParseDuration
                         type: string
                       when:

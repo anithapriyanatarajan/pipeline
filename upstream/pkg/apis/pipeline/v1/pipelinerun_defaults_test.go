@@ -17,6 +17,7 @@ limitations under the License.
 package v1_test
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -140,7 +141,7 @@ func TestPipelineRunSpec_SetDefaults(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			tc.prs.SetDefaults(ctx)
 
 			sortParamSpecs := func(x, y v1.ParamSpec) bool {
@@ -433,7 +434,7 @@ func TestPipelineRunDefaulting(t *testing.T) {
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := cfgtesting.SetDefaults(t.Context(), t, tc.defaults)
+			ctx := cfgtesting.SetDefaults(context.Background(), t, tc.defaults)
 			got := tc.in
 			got.SetDefaults(ctx)
 			if !cmp.Equal(got, tc.want, ignoreUnexportedResources) {
@@ -481,7 +482,7 @@ func TestPipelineRunDefaultingOnCreate(t *testing.T) {
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := apis.WithinCreate(cfgtesting.SetDefaults(t.Context(), t, tc.defaults))
+			ctx := apis.WithinCreate(cfgtesting.SetDefaults(context.Background(), t, tc.defaults))
 			got := tc.in
 			got.SetDefaults(ctx)
 			if !cmp.Equal(got, tc.want, ignoreUnexportedResources) {

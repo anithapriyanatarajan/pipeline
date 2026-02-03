@@ -17,6 +17,7 @@ limitations under the License.
 package tracing
 
 import (
+	"context"
 	"testing"
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
@@ -34,7 +35,7 @@ func TestNewTracerProvider(t *testing.T) {
 	tp := New("test-service", zap.NewNop().Sugar())
 
 	tracer := tp.Tracer("tracer")
-	_, span := tracer.Start(t.Context(), "example")
+	_, span := tracer.Start(context.TODO(), "example")
 
 	// tp.Tracer should return a nooptracer initially
 	// recording is always false for spans created by nooptracer
@@ -53,7 +54,7 @@ func TestOnStore(t *testing.T) {
 	tp.OnStore(nil)("config-tracing", cfg)
 
 	tracer := tp.Tracer("tracer")
-	_, span := tracer.Start(t.Context(), "example")
+	_, span := tracer.Start(context.TODO(), "example")
 
 	// tp.Tracer should return a nooptracer when tracing is disabled
 	// recording is always false for spans created by nooptracer
@@ -111,7 +112,7 @@ func TestOnStoreWithEnabled(t *testing.T) {
 	tp.OnStore(nil)("config-tracing", cfg)
 
 	tracer := tp.Tracer("tracer")
-	_, span := tracer.Start(t.Context(), "example")
+	_, span := tracer.Start(context.TODO(), "example")
 
 	if !span.IsRecording() {
 		t.Fatalf("Span is not recording with tracing enabled")

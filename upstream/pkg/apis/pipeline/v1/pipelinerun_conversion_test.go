@@ -17,6 +17,7 @@ limitations under the License.
 package v1_test
 
 import (
+	"context"
 	"testing"
 
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -25,11 +26,11 @@ import (
 func TestPipelineRunConversionBadType(t *testing.T) {
 	good, bad := &v1.PipelineRun{}, &v1.Pipeline{}
 
-	if err := good.ConvertTo(t.Context(), bad); err == nil {
+	if err := good.ConvertTo(context.Background(), bad); err == nil {
 		t.Errorf("ConvertTo() = %#v, wanted error", bad)
 	}
 
-	if err := good.ConvertFrom(t.Context(), bad); err == nil {
+	if err := good.ConvertFrom(context.Background(), bad); err == nil {
 		t.Errorf("ConvertFrom() = %#v, wanted error", good)
 	}
 }

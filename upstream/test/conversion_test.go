@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2022 The Tekton Authors
@@ -37,13 +38,13 @@ import (
 var (
 	filterLabels                   = cmpopts.IgnoreFields(metav1.ObjectMeta{}, "Labels")
 	filterAnnotations              = cmpopts.IgnoreFields(metav1.ObjectMeta{}, "Annotations")
-	filterV1TaskRunStatus          = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Artifacts", "Provenance")
-	filterV1PipelineRunStatus      = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
-	filterV1beta1TaskRunStatus     = cmpopts.IgnoreFields(v1beta1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
-	filterV1beta1PipelineRunStatus = cmpopts.IgnoreFields(v1beta1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
+	filterV1TaskRunStatus          = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Artifacts")
+	filterV1PipelineRunStatus      = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime")
+	filterV1beta1TaskRunStatus     = cmpopts.IgnoreFields(v1beta1.TaskRunStatusFields{}, "StartTime", "CompletionTime")
+	filterV1beta1PipelineRunStatus = cmpopts.IgnoreFields(v1beta1.PipelineRunStatusFields{}, "StartTime", "CompletionTime")
 	filterContainerStateTerminated = cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID", "Message")
-	filterV1StepState              = cmpopts.IgnoreFields(v1.StepState{}, "Name", "ImageID", "Container", "Provenance")
-	filterV1beta1StepState         = cmpopts.IgnoreFields(v1beta1.StepState{}, "Name", "ImageID", "ContainerName", "Provenance")
+	filterV1StepState              = cmpopts.IgnoreFields(v1.StepState{}, "Name", "ImageID", "Container")
+	filterV1beta1StepState         = cmpopts.IgnoreFields(v1beta1.StepState{}, "Name", "ImageID", "ContainerName")
 	filterV1TaskRunSA              = cmpopts.IgnoreFields(v1.TaskRunSpec{}, "ServiceAccountName")
 	filterV1PipelineRunSA          = cmpopts.IgnoreFields(v1.PipelineTaskRunTemplate{}, "ServiceAccountName")
 
@@ -657,7 +658,7 @@ status:
 // TestCRDConversionStrategy tests if webhook conversion strategy is
 // set to versioned CRDs.
 func TestCRDConversionStrategy(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -676,7 +677,7 @@ func TestCRDConversionStrategy(t *testing.T) {
 		resolutionv1beta1.Kind("resolutionrequests"),
 	}
 	for _, kind := range kinds {
-		gotCRD, err := c.ApixClient.ApiextensionsV1().CustomResourceDefinitions().Get(t.Context(), kind.String(), metav1.GetOptions{})
+		gotCRD, err := c.ApixClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), kind.String(), metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Couldn't get expected CRD %s: %s", kind, err)
 		}
@@ -695,7 +696,7 @@ func TestCRDConversionStrategy(t *testing.T) {
 // executed by the webhook for roundtrip. And then it creates the v1 Task CRD using v1Clients
 // and requests it by v1beta1Clients to compare with v1beta1.
 func TestTaskCRDConversion(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -722,7 +723,7 @@ func TestTaskCRDConversion(t *testing.T) {
 	}
 
 	v1beta1TaskRoundTrip := &v1beta1.Task{}
-	if err := v1beta1TaskRoundTrip.ConvertFrom(t.Context(), v1TaskGot); err != nil {
+	if err := v1beta1TaskRoundTrip.ConvertFrom(context.Background(), v1TaskGot); err != nil {
 		t.Fatalf("Failed to convert roundtrip v1beta1TaskGot ConvertFrom v1 = %v", err)
 	}
 	if d := cmp.Diff(v1beta1Task, v1beta1TaskRoundTrip, filterMetadata...); d != "" {
@@ -746,7 +747,7 @@ func TestTaskCRDConversion(t *testing.T) {
 	}
 
 	v1TaskRoundTrip := &v1.Task{}
-	if err := v1beta1TaskGot.ConvertTo(t.Context(), v1TaskRoundTrip); err != nil {
+	if err := v1beta1TaskGot.ConvertTo(context.Background(), v1TaskRoundTrip); err != nil {
 		t.Fatalf("Failed to convert roundtrip v1beta1TaskGot ConvertTo v1 = %v", err)
 	}
 	if d := cmp.Diff(v1Task, v1TaskRoundTrip, filterMetadata...); d != "" {
@@ -759,7 +760,7 @@ func TestTaskCRDConversion(t *testing.T) {
 // executed by the webhook for roundtrip. And then it creates the v1 TaskRun CRD using
 // v1Clients and requests it by v1beta1Clients to compare with v1beta1.
 func TestTaskRunCRDConversion(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -774,6 +775,12 @@ func TestTaskRunCRDConversion(t *testing.T) {
 	v1TaskRunExpected := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunExpectedYaml, v1beta1TaskRunName, namespace, v1beta1TaskRunName))
 	v1beta1TaskRunRoundTripExpected := parse.MustParseV1beta1TaskRun(t, fmt.Sprintf(v1beta1TaskRunExpectedYaml, v1beta1TaskRunName, namespace, v1beta1TaskRunName))
 
+	v1TaskRunExpected.Status.Provenance = &v1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
+	v1beta1TaskRunRoundTripExpected.Status.Provenance = &v1beta1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
 	if _, err := c.V1beta1TaskRunClient.Create(ctx, v1beta1TaskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1beta1 TaskRun: %s", err)
 	}
@@ -790,7 +797,7 @@ func TestTaskRunCRDConversion(t *testing.T) {
 	}
 
 	v1beta1TaskRunRoundTrip := &v1beta1.TaskRun{}
-	if err := v1beta1TaskRunRoundTrip.ConvertFrom(t.Context(), v1TaskRunGot); err != nil {
+	if err := v1beta1TaskRunRoundTrip.ConvertFrom(context.Background(), v1TaskRunGot); err != nil {
 		t.Fatalf("Failed to convert roundtrip v1beta1TaskRunGot ConvertFrom v1 = %v", err)
 	}
 	if d := cmp.Diff(v1beta1TaskRunRoundTripExpected, v1beta1TaskRunRoundTrip, filterV1beta1TaskRunFields...); d != "" {
@@ -801,6 +808,13 @@ func TestTaskRunCRDConversion(t *testing.T) {
 	v1TaskRun := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunYaml, v1TaskRunName, namespace))
 	v1beta1TaskRunExpected := parse.MustParseV1beta1TaskRun(t, fmt.Sprintf(v1beta1TaskRunExpectedYaml, v1TaskRunName, namespace, v1TaskRunName))
 	v1TaskRunRoundTripExpected := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunExpectedYaml, v1TaskRunName, namespace, v1TaskRunName))
+
+	v1beta1TaskRunExpected.Status.Provenance = &v1beta1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
+	v1TaskRunRoundTripExpected.Status.Provenance = &v1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
 
 	if _, err := c.V1TaskRunClient.Create(ctx, v1TaskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1 TaskRun: %s", err)
@@ -818,7 +832,7 @@ func TestTaskRunCRDConversion(t *testing.T) {
 	}
 
 	v1TaskRunRoundTrip := &v1.TaskRun{}
-	if err := v1beta1TaskRunGot.ConvertTo(t.Context(), v1TaskRunRoundTrip); err != nil {
+	if err := v1beta1TaskRunGot.ConvertTo(context.Background(), v1TaskRunRoundTrip); err != nil {
 		t.Fatalf("Failed to convert roundtrip v1beta1TaskRunGot ConvertTo v1 = %v", err)
 	}
 	if d := cmp.Diff(v1TaskRunRoundTripExpected, v1TaskRunRoundTrip, filterV1TaskRunFields...); d != "" {
@@ -831,7 +845,7 @@ func TestTaskRunCRDConversion(t *testing.T) {
 // by the webhook for roundtrip. And then it creates the v1 Pipeline CRD using v1Clients
 // and requests it by v1beta1Clients to compare with v1beta1.
 func TestPipelineCRDConversion(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -858,7 +872,7 @@ func TestPipelineCRDConversion(t *testing.T) {
 	}
 
 	v1beta1PipelineRoundTrip := &v1beta1.Pipeline{}
-	if err := v1beta1PipelineRoundTrip.ConvertFrom(t.Context(), v1PipelineGot); err != nil {
+	if err := v1beta1PipelineRoundTrip.ConvertFrom(context.Background(), v1PipelineGot); err != nil {
 		t.Fatalf("Filed to convert roundtrip v1beta1PipelineGot ConvertFrom v1 = %v", err)
 	}
 	if d := cmp.Diff(v1beta1Pipeline, v1beta1PipelineRoundTrip, filterMetadata...); d != "" {
@@ -882,7 +896,7 @@ func TestPipelineCRDConversion(t *testing.T) {
 	}
 
 	v1PipelineRoundTrip := &v1.Pipeline{}
-	if err := v1beta1PipelineGot.ConvertTo(t.Context(), v1PipelineRoundTrip); err != nil {
+	if err := v1beta1PipelineGot.ConvertTo(context.Background(), v1PipelineRoundTrip); err != nil {
 		t.Fatalf("Failed to convert roundtrip v1beta1PipelineGot ConvertTo v1 = %v", err)
 	}
 	if d := cmp.Diff(v1Pipeline, v1PipelineRoundTrip, filterMetadata...); d != "" {
@@ -895,7 +909,7 @@ func TestPipelineCRDConversion(t *testing.T) {
 // the webhook for roundtrip. And then it creates the v1 PipelineRun CRD using v1Clients
 // and requests it by v1beta1Clients to compare with v1beta1.
 func TestPipelineRunCRDConversion(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	t.Parallel()
@@ -931,7 +945,7 @@ func TestPipelineRunCRDConversion(t *testing.T) {
 	}
 
 	v1beta1PRRoundTrip := &v1beta1.PipelineRun{}
-	if err := v1beta1PRRoundTrip.ConvertFrom(t.Context(), v1PipelineRunGot); err != nil {
+	if err := v1beta1PRRoundTrip.ConvertFrom(context.Background(), v1PipelineRunGot); err != nil {
 		t.Fatalf("Error roundtrip v1beta1PipelineRun ConvertFrom v1PipelineRunGot = %v", err)
 	}
 	if d := cmp.Diff(v1beta1PRRoundTripExpected, v1beta1PRRoundTrip, filterV1beta1PipelineRunFields...); d != "" {
@@ -966,7 +980,7 @@ func TestPipelineRunCRDConversion(t *testing.T) {
 	}
 
 	v1PRRoundTrip := &v1.PipelineRun{}
-	if err := v1beta1PipelineRunGot.ConvertTo(t.Context(), v1PRRoundTrip); err != nil {
+	if err := v1beta1PipelineRunGot.ConvertTo(context.Background(), v1PRRoundTrip); err != nil {
 		t.Fatalf("Error roundtrip v1beta1PipelineRunGot ConvertTo v1 = %v", err)
 	}
 	if d := cmp.Diff(v1PRRoundTripExpected, v1PRRoundTrip, filterV1PipelineRunFields...); d != "" {

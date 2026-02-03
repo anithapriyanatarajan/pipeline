@@ -14,6 +14,7 @@ limitations under the License.
 package v1alpha1_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -227,7 +228,7 @@ func TestVerificationPolicy_Invalid(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.verificationPolicy.Validate(t.Context())
+			err := tt.verificationPolicy.Validate(context.Background())
 			if d := cmp.Diff(tt.want.Error(), err.Error()); d != "" {
 				t.Error("VerificationPolicy validate error mismatch", diff.PrintWantGot(d))
 			}
@@ -339,7 +340,7 @@ func TestVerificationPolicy_Valid(t *testing.T) {
 		}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.verificationPolicy.Validate(t.Context())
+			err := tt.verificationPolicy.Validate(context.Background())
 			if err != nil {
 				t.Errorf("validating valid VerificationPolicy: %v", err)
 			}

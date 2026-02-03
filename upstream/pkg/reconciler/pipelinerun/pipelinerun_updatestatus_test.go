@@ -17,6 +17,7 @@ limitations under the License.
 package pipelinerun
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -440,7 +441,7 @@ pipelineTaskName: task
 				Status:     tc.prStatus,
 			}
 
-			updatePipelineRunStatusFromChildRefs(logger, pr, []*v1.PipelineRun{}, tc.trs, tc.customRuns)
+			updatePipelineRunStatusFromChildRefs(logger, pr, tc.trs, tc.customRuns)
 
 			actualPrStatus := pr.Status
 
@@ -562,7 +563,7 @@ metadata:
 
 	for _, tc := range tcs {
 		t.Run(tc.prName, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			cfg := config.NewStore(logtesting.TestLogger(t))
 
 			ctx = cfg.ToContext(ctx)
@@ -573,7 +574,7 @@ metadata:
 				Status:     tc.prStatus(),
 			}
 
-			if err := updatePipelineRunStatusFromChildObjects(ctx, logger, pr, []*v1.PipelineRun{}, tc.trs, tc.runs); err != nil {
+			if err := updatePipelineRunStatusFromChildObjects(ctx, logger, pr, tc.trs, tc.runs); err != nil {
 				t.Fatalf("received an unexpected error: %v", err)
 			}
 
@@ -658,7 +659,7 @@ func TestValidateChildObjectsInPipelineRunStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			cfg := config.NewStore(logtesting.TestLogger(t))
 			cfg.OnConfigChanged(&corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName()},

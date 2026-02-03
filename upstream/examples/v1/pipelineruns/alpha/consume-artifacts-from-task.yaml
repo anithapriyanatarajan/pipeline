@@ -11,7 +11,7 @@ spec:
             A simple task that produces artifacts
           steps:
             - name: produce-artifacts
-              image: mirror.gcr.io/bash
+              image: bash:latest
               script: |
                 #!/usr/bin/env bash
                 cat > $(artifacts.path) << EOF
@@ -51,7 +51,7 @@ spec:
         taskSpec:
           steps:
             - name: artifacts-consumer-python
-              image: mirror.gcr.io/library/python
+              image: python:latest
               script: |
                 #!/usr/bin/env python3
                 import json

@@ -1,4 +1,4 @@
-apiVersion: tekton.dev/v1
+apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: publish-release
@@ -16,24 +16,24 @@ spec:
       description: Extra args to be passed to ko
       default: "--preserve-import-paths"
     - name: versionTag
-      description: The version, vX.Y.Z for stable, vYYYYMMDD-abc1234 for nightly that the artifacts should be tagged with (including `v`).
+      description: The vX.Y.Z version that the artifacts should be tagged with (including `v`)
     - name: imageRegistry
       description: The target image registry
-      default: ghcr.io
+      default: gcr.io
     - name: imageRegistryPath
       description: The path (project) in the image registry
     - name: imageRegistryRegions
       description: The target image registry regions
-      default: ""
+      default: "us eu asia"
     - name: imageRegistryUser
       description: Username to be used to login to the container registry
       default: "_json_key"
     - name: releaseAsLatest
-      description: Whether to tag and publish this release as Pipelines latest
+      description: Whether to tag and publish this release as Pipelines' latest
       default: "true"
     - name: platforms
       description: Platforms to publish for the images (e.g. linux/amd64,linux/arm64)
-      default: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64
+      default: linux/amd64,linux/arm,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64
     - name: serviceAccountPath
       description: The name of the service account path within the release-secret workspace
   workspaces:
@@ -73,7 +73,7 @@ spec:
   steps:
 
   - name: container-registry-auth
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:de0001d29700c2cc3e4bf11d938fbb2481ff7a2f6528fa466dee516b485f2ae6
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:140d486014586592feb48613cebd31b9f54e8ceb9e38f5236f1670836569f601
     script: |
       #!/bin/sh
       set -ex
@@ -81,7 +81,7 @@ spec:
       # Login to the container registry
       DOCKER_CONFIG=$(cat ${CONTAINER_REGISTRY_CREDENTIALS} | \
         crane auth login -u ${CONTAINER_REGISTRY_USER} --password-stdin $(params.imageRegistry) 2>&1 | \
-        sed -n 's,^.*logged in via \(.*\)$,\1,p')
+        sed 's,^.*logged in via \(.*\)$,\1,g')
 
       # Auth with account credentials for all regions.
       for region in ${REGIONS}
@@ -92,7 +92,7 @@ spec:
       cp ${DOCKER_CONFIG} /workspace/docker-config.json
 
   - name: create-ko-yaml
-    image: cgr.dev/chainguard/go:latest-dev@sha256:fa9ef129b35dacc10c80f063f927df0cbb6336d38ef2131fb925048a720346cf
+    image: cgr.dev/chainguard/go:latest-dev@sha256:b567f136bf3be161848fcb9615064574de1b94d8379570ec729acbd2554cdbfb
     script: |
       #!/bin/sh
       set -ex
@@ -104,9 +104,6 @@ spec:
 
       # Change to directory with vendor/
       cd ${PROJECT_ROOT}
-
-      # Copy the repository's .ko.yaml as the base configuration
-      cp ${PROJECT_ROOT}/.ko.yaml /workspace/.ko.yaml
 
       COMBINED_BASE_IMAGE_BASE=${CONTAINER_REGISTRY}
       # If the IMAGE_REGISTRY_PATH does not already includes the package, add it
@@ -124,13 +121,21 @@ spec:
         mcr.microsoft.com/windows/nanoserver:ltsc2022 \
         ${COMBINED_BASE_IMAGE_BASE}/combined-base-image:latest)
 
-      # Replace :latest references with the actual combined base image digest
-      sed -i "s|ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/combined-base-image:latest|${COMBINED_BASE_IMAGE}|g" /workspace/.ko.yaml
+      # NOTE: Make sure this list of images to use the combined base image is in sync with what's in test/presubmit-tests.sh's 'ko_resolve' function.
+      cat <<EOF > /workspace/.ko.yaml
+      # This matches the value configured in .ko.yaml
+      defaultBaseImage: cgr.dev/chainguard/static@sha256:67a1b00e0134e2b3a614c7198a26f7deed9d11b7acad4d52c79c0cfd47a2eae7
+      baseImageOverrides:
+        # Use the combined base image for images that should include Windows support.
+        $(params.package)/cmd/entrypoint: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/nop: ${COMBINED_BASE_IMAGE}
+        $(params.package)/cmd/workingdirinit: ${COMBINED_BASE_IMAGE}
+      EOF
 
       cat /workspace/.ko.yaml
 
   - name: run-ko
-    image: ghcr.io/tektoncd/plumbing/ko@sha256:bf208272c78813000ce4652b2c5cde0e433274d8a1870d037d817b8e14e830bf
+    image: gcr.io/tekton-releases/dogfooding/ko@sha256:a91cdc055ee8727860d35b1aa31940b3552395e5f5d273b698ef6fcb0fa786c1
     env:
     - name: KO_DOCKER_REPO
       value: $(params.imageRegistry)/$(params.imageRegistryPath)
@@ -139,9 +144,6 @@ spec:
     script: |
       #!/usr/bin/env sh
       set -ex
-
-      # Fix Git ownership issue for the repository directory
-      git config --global --add safe.directory ${PROJECT_ROOT}
 
       # Use the generated `.ko.yaml`
       export KO_CONFIG_PATH=/workspace
@@ -195,9 +197,8 @@ spec:
       # Rewrite "devel" to params.versionTag
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.yaml
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.notags.yaml
-
   - name: koparse
-    image: ghcr.io/tektoncd/plumbing/koparse@sha256:768a80e21a2f866f38ab686c8f54b59c3fac6578f9ba1f35feb0883f1b1a53fc
+    image: gcr.io/tekton-releases/dogfooding/koparse@sha256:194c2ab9dce5f778ed757af13c626d6b85f15452e2c2902c79b0d0f5a0adf4d1
     script: |
       set -ex
 
@@ -231,7 +232,7 @@ spec:
         ${PRESERVE_IMPORT_PATH} > /workspace/built_images
 
   - name: tag-images
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:de0001d29700c2cc3e4bf11d938fbb2481ff7a2f6528fa466dee516b485f2ae6
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:140d486014586592feb48613cebd31b9f54e8ceb9e38f5236f1670836569f601
     script: |
       #!/bin/sh
       set -ex

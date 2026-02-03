@@ -17,6 +17,7 @@ limitations under the License.
 package workspace_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestValidateBindingsValid(t *testing.T) {
 		bindings: []v1.WorkspaceBinding{},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := workspace.ValidateBindings(t.Context(), tc.declarations, tc.bindings); err != nil {
+			if err := workspace.ValidateBindings(context.Background(), tc.declarations, tc.bindings); err != nil {
 				t.Errorf("didnt expect error for valid bindings but got: %v", err)
 			}
 		})
@@ -153,7 +154,7 @@ func TestValidateBindingsInvalid(t *testing.T) {
 		}},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := workspace.ValidateBindings(t.Context(), tc.declarations, tc.bindings); err == nil {
+			if err := workspace.ValidateBindings(context.Background(), tc.declarations, tc.bindings); err == nil {
 				t.Errorf("expected error for invalid bindings but didn't get any!")
 			}
 		})

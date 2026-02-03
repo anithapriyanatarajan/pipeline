@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2023 The Tekton Authors
@@ -21,6 +22,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
@@ -33,7 +35,7 @@ import (
 
 // TestAffinityAssistant_PerWorkspace tests the taskrun pod scheduling and the PVC lifecycle status
 func TestAffinityAssistant_PerWorkspace(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -117,7 +119,7 @@ spec:
 // TestAffinityAssistant_PerPipelineRun tests that mounting multiple PVC based workspaces to a pipeline task is allowed and
 // all the pods are scheduled to the same node in AffinityAssistantPerPipelineRuns mode
 func TestAffinityAssistant_PerPipelineRun(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -126,7 +128,8 @@ func TestAffinityAssistant_PerPipelineRun(t *testing.T) {
 
 	// update feature flag
 	configMapData := map[string]string{
-		"coschedule": config.CoschedulePipelineRuns,
+		"coschedule":                 config.CoschedulePipelineRuns,
+		"disable-affinity-assistant": "true",
 	}
 	if err := updateConfigMap(ctx, c.KubeClient, system.Namespace(), config.GetFeatureFlagsConfigName(), configMapData); err != nil {
 		t.Fatal(err)
@@ -234,7 +237,8 @@ func validatePodAffinity(t *testing.T, ctx context.Context, podNames []string, n
 func resetFeatureFlagAndCleanup(ctx context.Context, t *testing.T, c *clients, namespace string) {
 	t.Helper()
 	configMapData := map[string]string{
-		"coschedule": config.DefaultCoschedule,
+		"coschedule":                 config.DefaultCoschedule,
+		"disable-affinity-assistant": strconv.FormatBool(config.DefaultDisableAffinityAssistant),
 	}
 	if err := updateConfigMap(ctx, c.KubeClient, system.Namespace(), config.GetFeatureFlagsConfigName(), configMapData); err != nil {
 		t.Fatal(err)
