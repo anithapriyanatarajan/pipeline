@@ -1,0 +1,19 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: simple-build-run-
+  namespace: default
+spec:
+  pipelineRef:
+    name: simple-build-pipeline
+  params:
+    - name: repo-url
+      value: "https://github.com/tektoncd/pipeline"
+    - name: image-name
+      value: "demo-app:latest"
+  workspaces:
+    - name: shared-data
+      persistentVolumeClaim:
+        claimName: demo-workspace-pvc
+  timeouts:
+    pipeline: 1h

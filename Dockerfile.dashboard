@@ -1,0 +1,46 @@
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /workspace
+
+# Copy go mod files
+COPY go.mod go.sum ./
+COPY vendor/ vendor/
+
+# Copy source code (including internal packages needed by pkg/apis)
+COPY cmd/dashboard/ cmd/dashboard/
+COPY pkg/ pkg/
+COPY internal/ internal/
+
+# Build the dashboard
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -a -installsuffix cgo -o dashboard ./cmd/dashboard
+
+# Frontend build stage
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app
+
+# Copy frontend files
+COPY web/dashboard/package*.json ./
+RUN npm install
+
+COPY web/dashboard/ ./
+RUN npm run build
+
+# Final stage
+FROM gcr.io/distroless/static:nonroot
+
+WORKDIR /
+
+# Copy binary from builder
+COPY --from=builder /workspace/dashboard /dashboard
+
+# Copy frontend build
+COPY --from=frontend-builder /app/build /web/dashboard/build
+
+# Use nonroot user
+USER 65532:65532
+
+EXPOSE 8080
+
+ENTRYPOINT ["/dashboard"]

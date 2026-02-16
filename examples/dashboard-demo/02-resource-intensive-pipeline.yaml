@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: resource-intensive-pipeline
+  namespace: default
+spec:
+  description: Resource-intensive pipeline for cost tracking demo
+  tasks:
+    - name: data-processing
+      taskSpec:
+        steps:
+          - name: process
+            image: python:3.11
+            computeResources:
+              requests:
+                memory: "256Mi"
+                cpu: "250m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+            script: |
+              #!/usr/bin/env python3
+              import time
+              print("Starting data processing...")
+              for i in range(10):
+                  time.sleep(2)
+                  print(f"Processed batch {i+1}/10")
+              print("Processing complete")
+
+    - name: generate-reports
+      runAfter:
+        - data-processing
+      taskSpec:
+        steps:
+          - name: report
+            image: alpine:3.19
+            computeResources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"
+            script: |
+              #!/bin/sh
+              echo "Generating reports..."
+              sleep 10
+              echo "Reports generated"

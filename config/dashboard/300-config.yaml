@@ -1,0 +1,44 @@
+# Copyright 2026 The Tekton Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-dashboard
+  namespace: tekton-pipelines
+  labels:
+    app.kubernetes.io/name: tekton-dashboard
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: tekton-pipelines
+data:
+  # Cost tracking configuration
+  cost-tracking.enabled: "true"
+  cost-tracking.cpu-cost-per-hour: "0.05"
+  cost-tracking.memory-cost-per-gb-hour: "0.01"
+  cost-tracking.storage-cost-per-gb-hour: "0.001"
+  
+  # AI insights configuration
+  ai-insights.enabled: "true"
+  ai-insights.anomaly-detection: "true"
+  ai-insights.predictive-analysis: "true"
+  ai-insights.min-samples-for-prediction: "10"
+  
+  # Metrics configuration
+  metrics.endpoint: "http://tekton-pipelines-controller:9090/metrics"
+  metrics.collection-interval: "15s"
+  
+  # Data retention
+  retention.metrics-history: "24h"
+  retention.cost-history: "7d"
+  retention.traces: "1h"

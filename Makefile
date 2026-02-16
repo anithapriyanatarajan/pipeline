@@ -219,5 +219,89 @@ help:
 
 .PHONY: version
 version:
-
 	@echo $(VERSION)
+
+## Dashboard targets
+
+DASHBOARD_IMAGE ?= tekton-dashboard:latest
+KIND_CLUSTER_NAME ?= tekton-test
+
+.PHONY: build-dashboard
+build-dashboard: ## Build dashboard binary
+	$(info $(M) building dashboard binary…)
+	$Q $(GO) build -mod=vendor -v -o bin/dashboard ./cmd/dashboard
+
+.PHONY: build-dashboard-image
+build-dashboard-image: ## Build dashboard Docker image
+	$(info $(M) building dashboard Docker image…)
+	$Q docker build -t $(DASHBOARD_IMAGE) -f Dockerfile.dashboard .
+
+.PHONY: kind-cluster
+kind-cluster: ## Create a kind cluster for testing
+	$(info $(M) creating kind cluster…)
+	$Q kind create cluster --name $(KIND_CLUSTER_NAME) || true
+	$Q kubectl config use-context kind-$(KIND_CLUSTER_NAME)
+
+.PHONY: kind-delete
+kind-delete: ## Delete the kind cluster
+	$(info $(M) deleting kind cluster…)
+	$Q kind delete cluster --name $(KIND_CLUSTER_NAME)
+
+.PHONY: kind-load-dashboard
+kind-load-dashboard: build-dashboard-image ## Load dashboard image into kind
+	$(info $(M) loading dashboard image into kind…)
+	$Q kind load docker-image $(DASHBOARD_IMAGE) --name $(KIND_CLUSTER_NAME)
+
+.PHONY: deploy-tekton
+deploy-tekton: ## Deploy Tekton Pipelines to the cluster
+	$(info $(M) deploying Tekton Pipelines…)
+	$Q kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
+	$Q kubectl wait --for=condition=Ready pods --all -n tekton-pipelines --timeout=300s
+
+.PHONY: deploy-dashboard
+deploy-dashboard: ## Deploy the dashboard to the cluster
+	$(info $(M) deploying dashboard…)
+	$Q kubectl apply -f config/dashboard/
+
+.PHONY: deploy-dashboard-demo
+deploy-dashboard-demo: ## Deploy demo pipelines
+	$(info $(M) deploying demo pipelines…)
+	$Q kubectl apply -f examples/dashboard-demo/
+
+.PHONY: dashboard-logs
+dashboard-logs: ## Show dashboard logs
+	$Q kubectl logs -n tekton-pipelines -l app.kubernetes.io/name=tekton-dashboard --tail=100 -f
+
+.PHONY: dashboard-port-forward
+dashboard-port-forward: ## Port forward to access dashboard (http://localhost:8080)
+	$(info $(M) port forwarding to dashboard on http://localhost:8080…)
+	$Q kubectl port-forward -n tekton-pipelines svc/tekton-dashboard 8080:8080
+
+.PHONY: test-dashboard-local
+test-dashboard-local: kind-cluster deploy-tekton kind-load-dashboard deploy-dashboard ## Full local dashboard test in kind
+	$(info $(M) ========================================)
+	$(info $(M) Dashboard deployed successfully!)
+	$(info $(M) Run 'make dashboard-port-forward' to access it)
+	$(info $(M) Or run 'make dashboard-demo-run' to create demo data)
+	$(info $(M) ========================================)
+
+.PHONY: dashboard-demo-run
+dashboard-demo-run: deploy-dashboard-demo ## Run demo pipeline runs
+	$(info $(M) creating demo pipeline runs…)
+	$Q for i in 1 2 3 4 5; do \
+		kubectl create -f examples/dashboard-demo/01-simple-pipelinerun.yaml 2>/dev/null || true; \
+		sleep 2; \
+	done
+	$(info $(M) demo runs created! Access dashboard with: make dashboard-port-forward)
+
+.PHONY: dashboard-status
+dashboard-status: ## Check dashboard deployment status
+	$(info $(M) checking dashboard status…)
+	$Q kubectl get pods -n tekton-pipelines -l app.kubernetes.io/name=tekton-dashboard
+	$Q kubectl get svc -n tekton-pipelines tekton-dashboard
+
+.PHONY: dashboard-cleanup
+dashboard-cleanup: ## Remove dashboard from cluster
+	$(info $(M) cleaning up dashboard…)
+	$Q kubectl delete -f config/dashboard/ --ignore-not-found=true
+	$Q kubectl delete -f examples/dashboard-demo/ --ignore-not-found=true

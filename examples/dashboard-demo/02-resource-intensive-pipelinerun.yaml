@@ -1,0 +1,10 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: resource-intensive-run-
+  namespace: default
+spec:
+  pipelineRef:
+    name: resource-intensive-pipeline
+  timeouts:
+    pipeline: 2h

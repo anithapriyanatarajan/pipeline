@@ -1,0 +1,85 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: simple-build-pipeline
+  namespace: default
+spec:
+  description: Simple build pipeline for demo
+  params:
+    - name: repo-url
+      type: string
+      default: "https://github.com/example/app"
+    - name: image-name
+      type: string
+      default: "example-app"
+  workspaces:
+    - name: shared-data
+  tasks:
+    - name: fetch-source
+      taskSpec:
+        workspaces:
+          - name: output
+        params:
+          - name: url
+        steps:
+          - name: clone
+            image: alpine/git:latest
+            script: |
+              #!/bin/sh
+              echo "Cloning $(params.url)..."
+              sleep 5
+              echo "Clone complete"
+      params:
+        - name: url
+          value: $(params.repo-url)
+      workspaces:
+        - name: output
+          workspace: shared-data
+    
+    - name: run-tests
+      runAfter:
+        - fetch-source
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: test
+            image: node:18-alpine
+            script: |
+              #!/bin/sh
+              echo "Running tests..."
+              sleep 10
+              echo "Tests passed"
+      workspaces:
+        - name: source
+          workspace: shared-data
+    
+    - name: build-image
+      runAfter:
+        - run-tests
+      taskSpec:
+        params:
+          - name: image
+        steps:
+          - name: build
+            image: gcr.io/kaniko-project/executor:latest
+            script: |
+              #!/bin/sh
+              echo "Building image $(params.image)..."
+              sleep 15
+              echo "Build complete"
+      params:
+        - name: image
+          value: $(params.image-name)
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-workspace-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
