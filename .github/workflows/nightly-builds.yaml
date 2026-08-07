@@ -186,6 +186,8 @@ jobs:
             --param releaseAsLatest="true" \
             --param runTests="false" \
             --param releaseMode="nightly" \
+            --param previousReleaseTag="" \
+            --param releaseName="" \
             --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
             --workspace name=release-secret,secret=release-secret \
             --workspace name=release-images-secret,secret=release-images-secret \
@@ -203,7 +205,14 @@ jobs:
             echo "-----------------------------------------------------------"
             exit 1
           fi
-          PIPELINE_RUN=$(cat /tmp/tkn-start-out)
+          # With --output name, tkn prints only the PipelineRun name to stdout.
+          # Take the last non-empty line to be robust against any stray output.
+          PIPELINE_RUN=$(grep -v '^[[:space:]]*$' /tmp/tkn-start-out | tail -n1)
+          if [ -z "${PIPELINE_RUN}" ]; then
+            echo "Could not determine PipelineRun name from tkn output!"
+            cat /tmp/tkn-start-out || true
+            exit 1
+          fi
 
           echo "Pipeline started: ${PIPELINE_RUN}"
           # Note: tkn pipelinerun logs -f exits 0 even when the PipelineRun fails,
