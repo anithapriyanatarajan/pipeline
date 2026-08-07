@@ -163,6 +163,35 @@ jobs:
 
           echo "Starting Tekton pipeline..."
 
+          # TEMP(revert-before-PR): debug run of the same command WITHOUT --output name
+          # so stdout/stderr (the real start error) is printed to the workflow log.
+          # Non-fatal (|| true) so we still fall through to the real capturing call below.
+          echo "::group::DEBUG tkn pipeline start (verbose)"
+          tkn pipeline start pipeline-release \
+            --serviceaccount=release-right-meow \
+            --param package="${PACKAGE}" \
+            --param repoName="${REPO_NAME}" \
+            --param gitRevision="${STEPS_VERSION_OUTPUTS_LATEST_SHA}" \
+            --param versionTag="${STEPS_VERSION_OUTPUTS_VERSION_TAG}" \
+            --param releaseBucket="${BUCKET}" \
+            --param imageRegistry=${{ env.REGISTRY }} \
+            --param imageRegistryPath="${IMAGE_REGISTRY_PATH}" \
+            --param imageRegistryUser="${{ env.IMAGE_REGISTRY_USER }}" \
+            --param imageRegistryRegions="" \
+            --param buildPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le" \
+            --param publishPlatforms="linux/amd64,linux/arm64,linux/s390x,linux/ppc64le,windows/amd64" \
+            --param koExtraArgs="" \
+            --param serviceAccountImagesPath=docker-config.json \
+            --param releaseAsLatest="true" \
+            --param runTests="false" \
+            --param releaseMode="nightly" \
+            --workspace name=workarea,volumeClaimTemplateFile=workspace-template.yaml \
+            --workspace name=release-secret,secret=release-secret \
+            --workspace name=release-images-secret,secret=release-images-secret \
+            --tasks-timeout 2h \
+            --pipeline-timeout 3h || echo "DEBUG start returned non-zero (see above)"
+          echo "::endgroup::"
+
           PIPELINE_RUN=$(tkn pipeline start pipeline-release \
             --serviceaccount=release-right-meow \
             --param package="${PACKAGE}" \
