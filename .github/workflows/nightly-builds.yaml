@@ -3,6 +3,11 @@ name: Tekton Nightly Build
 permissions: {}
 
 "on":
+  # TEMP(revert-before-PR): trigger on the troubleshooting branch to reproduce in fork
+  push:
+    branches: [test-nightly-fails]
+  pull_request:
+    branches: [test-nightly-fails]
   schedule:
     # Run at 03:00 UTC daily
     - cron: "0 3 * * *"
@@ -25,13 +30,13 @@ env:
   BUCKET: ${{ inputs.nightly_bucket || 'tekton-nightly' }}
   REPO_NAME: ${{ github.event.repository.name }}
   IMAGE_REGISTRY_PATH: ${{ github.repository }}
-  IMAGE_REGISTRY_USER: tekton-robot
+  IMAGE_REGISTRY_USER: anithapriyanatarajan  # TEMP(revert-before-PR): was tekton-robot
 
 jobs:
   build:
     name: Nightly Build (K8s ${{ inputs.kubernetes_version || 'v1.33.x' }})
-    runs-on: ubuntu-latest-8-cores
-    if: github.repository_owner == 'tektoncd'  # do not run this elsewhere
+    runs-on: ubuntu-latest  # TEMP(revert-before-PR): was ubuntu-latest-8-cores
+    if: github.repository_owner == 'anithapriyanatarajan'  # TEMP(revert-before-PR): was 'tektoncd'
 
     permissions:
       contents: read
