@@ -163,7 +163,12 @@ jobs:
 
           echo "Starting Tekton pipeline..."
 
-          PIPELINE_RUN=$(tkn pipeline start pipeline-release \
+          # Capture stdout and stderr to separate files so that on failure we can
+          # print BOTH: interactive prompts (e.g. "? Value for param `foo`") are
+          # written to stdout, while the terminating error (e.g. "Error: EOF") goes
+          # to stderr. On success, stdout is just the PipelineRun name.
+          set +e
+          tkn pipeline start pipeline-release \
             --serviceaccount=release-right-meow \
             --param package="${PACKAGE}" \
             --param repoName="${REPO_NAME}" \
@@ -186,15 +191,19 @@ jobs:
             --workspace name=release-images-secret,secret=release-images-secret \
             --tasks-timeout 2h \
             --pipeline-timeout 3h \
-            --output name 2>/tmp/tkn-start-err) || {
+            --output name >/tmp/tkn-start-out 2>/tmp/tkn-start-err
+          START_RC=$?
+          set -e
+          if [ "${START_RC}" -ne 0 ]; then
             echo "Failed to start Tekton pipeline!"
-            # Surface tkn's stderr (e.g. param-resolution errors like 'Error: EOF')
-            # which the --output name capture would otherwise swallow.
-            echo "----- tkn pipeline start stderr -----"
+            echo "----- tkn pipeline start stdout (prompts appear here) -----"
+            cat /tmp/tkn-start-out || true
+            echo "----- tkn pipeline start stderr (error appears here) -----"
             cat /tmp/tkn-start-err || true
-            echo "-------------------------------------"
+            echo "-----------------------------------------------------------"
             exit 1
-          }
+          fi
+          PIPELINE_RUN=$(cat /tmp/tkn-start-out)
 
           echo "Pipeline started: ${PIPELINE_RUN}"
           # Note: tkn pipelinerun logs -f exits 0 even when the PipelineRun fails,
